@@ -1,0 +1,277 @@
+# Navigate Peptides — Developer Handoff
+
+Welcome. This document is your single entry point. Read it once before touching anything.
+
+If it conflicts with the rest of `docs/`, the rest of `docs/` is the source of truth — this file just orients you. Read these in order on day one:
+
+1. **This file** — what's live, what just shipped, what NOT to touch
+2. `docs/COMPLIANCE` — the most important file in the repo. Internalize before editing copy
+3. `docs/PAYMENT_PROCESSING` — why every word on the site matters
+4. `docs/DEPLOY` — how code reaches production
+5. `docs/SITE_ARCHITECTURE` + `docs/PRODUCT_CATALOG` — what the site is
+6. `docs/BRAND_AND_DESIGN` — visual rules
+7. `README.md` — quick reference
+
+---
+
+## TL;DR
+
+- **WordPress 6.9 + WooCommerce + custom theme** on wp.com Atomic Business
+- Live at https://navigatepeptides.com
+- Pushes to `main` auto-deploy via GitHub Actions over SSH (`.github/workflows/deploy-wpcom-sftp.yml`)
+- Payment processor approval (Argyle / NMI) is the central business constraint. Every UI/copy decision is gated by `docs/COMPLIANCE`
+- 8 audit-fix PRs (#92–#99) landed May 2026 covering compliance, security, perf, a11y, SEO, silent-failure surfacing, WP runtime, GDPR retention. Skim those PRs and their commit messages — they are the operational history you need most
+
+---
+
+## What's live and recent
+
+| PR | Theme |
+|----|-------|
+| #92 | Canonical RUO disclaimer collapse + always-show on cards/archive |
+| #93 | Critical perf+a11y: archive 3D removed, card CSS dedup, cat-color contrast, duplicate id fix |
+| #94 | PII security — stop logging raw PII to error_log, harden age-gate regex injection |
+| #95 | Silent-failure surfacing — `nav_admin_warn()` to wp-admin notices |
+| #96 | SEO completeness — per-page meta descriptions, image arrays, drop synthesized SKU |
+| #97 | SEO deepfix — research CPT schema, AggregateOffer, preconnects, scrub map polish |
+| #98 | WP runtime — textdomain loader, fix wc dequeue priority, comment redaction |
+| #99 | Prod-ready handoff polish — a11y heading hierarchy, i18n wrapping, GDPR retention cron |
+
+Open the PR descriptions on GitHub for full context — the commit bodies explain WHY each change was made and reference the audit IDs.
+
+---
+
+## Critical invariants — DO NOT BREAK
+
+These break processor approval if violated. Treat them as compile-time-enforced rules even though PHP can't enforce them:
+
+1. **No legal entity name** (`Elytherion LLC`) anywhere user-facing. The DBA "Navigate Peptides" is the only public name. `inc/business.php` deliberately omits `NAV_BIZ_LEGAL_NAME`. PHP comments referencing the entity have been redacted.
+
+2. **No phone number** user-facing. `NAV_BIZ_PHONE_*` constants are absent by design. Contact is email only. No `tel:` links.
+
+3. **Canonical RUO disclaimer** is the single source of truth. ALWAYS fetch via `nav_get_disclaimer('sitewide')` from `inc/compliance.php`. NEVER paraphrase. Processor scanners cross-check page text against JSON-LD's `disambiguatingDescription` — drift causes underwriter rejection.
+
+4. **No "human consumption / dosing / injection / ingestion"** outside the canonical disclaimer block. The `nav_seo_scrub()` map in `inc/seo.php:75-130` rewrites processor-flagged terms automatically — expand the map rather than coding around it. If you find a term that shouldn't be there, add the regex.
+
+5. **No marketing claims** — no "therapeutic", "treat", "cure", "diagnose", "heal", "boost", "enhance", "FDA-approved", "clinically proven", "before and after", "testimonial". All scrubbed by `nav_seo_scrub()`. See `docs/COMPLIANCE` for the full forbidden list.
+
+6. **No prices on wholesale SKUs** if any get added (currently storefront is retail only).
+
+7. **Age gate** must fire before any product content paints. Don't refactor `inc/age-gate.php` without understanding why it emits the same HTML to every visitor (Atomic edge cache constraint).
+
+---
+
+## Operator tools the audit added — know these
+
+These are theme-local helpers you'll use weekly:
+
+### `nav_admin_warn($code, $message)` — `inc/compliance.php`
+Push a backend warning to a transient queue that surfaces as a dismissible WP admin notice on the next dashboard load. Bounded at 20 unique codes, 7-day TTL, `manage_options`-gated. Currently fires on:
+- JSON-LD encode failures
+- `update_post_meta()` failures during product save (COA / batch / lab fields)
+- `_nav_meta_description` save failures
+- `wp_insert_term()` failures during theme activation
+- Missing `privacy-policy` / `terms-of-service` pages
+
+**When debugging, check wp-admin first.** The codebase logs to `error_log` AND surfaces to admin notices for compliance-critical paths.
+
+### `nav_redact($value)` — `inc/compliance.php`
+Returns a 12-char SHA-256 token salted by `AUTH_SALT`. Use for any IP / email / UA value going to `error_log`. NEVER log raw PII — GDPR + Argyle audit risk.
+
+### `nav_subscriber_pii_scrub` cron — `inc/subscribe.php`
+Daily scheduled event. Deletes `_nav_ip_hash` + `_nav_user_agent_hash` from `nav_subscriber` rows older than 365 days. Email + consent timestamp stay. Filterable via `nav_subscriber_pii_retention_days`. Scheduled on `after_switch_theme`, cleared on `switch_theme`.
+
+### `nav_get_disclaimer('sitewide')` — `inc/compliance.php`
+Single source of truth for the RUO line. Every call-site resolves to the same string. If you need a different disclaimer, add a key — don't paraphrase inline.
+
+### SEO meta box — `inc/seo.php`
+Every page/post/product has a "SEO — Navigate Peptides" meta box with two fields:
+- **Meta Description** override (160-char target, falls back to auto-generated)
+- **Social Share Image (Open Graph)** — media picker, stores `_nav_og_image_id`. Falls back to featured image → theme OG fallback.
+
+### `nav_seo_scrub($text)` — `inc/seo.php`
+Compliance regex rewriter. Applied to every product description, term description, meta description, schema description, OG description. Map at `inc/seo.php:90-130`. Add to it; don't bypass it.
+
+---
+
+## Repo layout
+
+```
+.
+├── README.md                          — quick reference
+├── docs/                              — canonical project docs
+│   ├── HANDOFF                        — this file
+│   ├── COMPLIANCE                     — required reading
+│   ├── PAYMENT_PROCESSING             — processor architecture
+│   ├── DEPLOY                         — how code ships
+│   ├── SITE_ARCHITECTURE              — IA + nav
+│   ├── PRODUCT_CATALOG                — compounds + pricing
+│   ├── BRAND_AND_DESIGN               — visual system
+│   ├── CONTENT_STRATEGY               — copy posture
+│   ├── COMPETITIVE_INTEL              — peer storefront notes
+│   └── MARKET_INTEL                   — market context
+├── .github/workflows/
+│   └── deploy-wpcom-sftp.yml          — auto-deploy on push to main
+└── wp-content/themes/navigate-peptides/
+    ├── style.css                      — theme header + version
+    ├── functions.php                  — bootstrap, theme support, headers, CSP
+    ├── header.php / footer.php
+    ├── front-page.php                 — homepage hero
+    ├── single.php / single-product.php / archive.php / archive-product.php
+    ├── 404.php / search.php / page.php / index.php
+    ├── inc/
+    │   ├── compliance.php             — canonical RUO + nav_redact + nav_admin_warn
+    │   ├── seo.php                    — all SEO surface (~1,500 LOC)
+    │   ├── woocommerce.php            — cart, PDP tabs, product meta save
+    │   ├── analytics.php              — GA4 + ecommerce events
+    │   ├── subscribe.php              — newsletter REST + retention cron
+    │   ├── contact.php                — contact form + auto-ack
+    │   ├── consent.php                — cookie banner + legal-page URL helpers
+    │   ├── age-gate.php               — RUO + 21+ entry modal
+    │   ├── custom-types.php           — nav_research CPT + term seeding
+    │   ├── business.php               — DBA / address / email constants
+    │   ├── arcana-credit.php          — footer attribution
+    │   └── minicart.php               — cart drawer
+    ├── page-templates/                — about, quality, COA, contact, etc.
+    ├── template-parts/                — product-card, category-grid
+    ├── woocommerce/                   — Woo template overrides
+    ├── assets/
+    │   ├── css/main.css               — site styles
+    │   ├── css/woocommerce.css        — product-card source of truth
+    │   ├── js/main.js                 — site JS (~600 LOC, single file)
+    │   ├── models/vial-*.glb          — 18 product 3D models
+    │   └── images/                    — WebP posters, wordmark, OG share
+    ├── languages/                     — translations (currently empty; .gitkeep documents the wp i18n make-pot command)
+    └── setup.sh                       — idempotent WP-CLI provisioning
+```
+
+---
+
+## Operational runbook
+
+### Deploy
+
+1. PR against `main` → review → merge
+2. GitHub Actions auto-runs `.github/workflows/deploy-wpcom-sftp.yml`
+3. Push completes when the workflow's "Sync theme over SSH" step finishes (~30-90s)
+4. Verify on live site
+
+**Required GitHub Actions secrets** (Settings → Secrets → Actions):
+- `WPCOM_SSH_HOST`
+- `WPCOM_SSH_USER`
+- `WPCOM_SSH_KEY` (private half; public half registered on wp.com via Calypso dashboard)
+- `WPCOM_THEME_PATH` (typically `/srv/htdocs/wp-content/themes/navigate-peptides`)
+
+Workflow is gated on the `production` GitHub environment — add required reviewers in Settings → Environments → production for human-approval before deploy. Currently optional.
+
+### Post-deploy smoke checks (manual, takes 2 minutes)
+
+```
+# Homepage hero vial renders, no JS errors
+open https://navigatepeptides.com/
+
+# Archive page renders, RUO banner above the grid
+open https://navigatepeptides.com/compounds/
+
+# COA lookup form renders
+open https://navigatepeptides.com/quality/coa/
+
+# Sitemap returns 200
+curl -sI https://navigatepeptides.com/wp-sitemap.xml | head -3
+
+# robots.txt has Sitemap line
+curl -s https://navigatepeptides.com/robots.txt | grep -i sitemap
+
+# Security headers present
+curl -sI https://navigatepeptides.com/ | grep -iE 'content-security|x-frame|strict-transport'
+```
+
+After every deploy, open wp-admin and check the top of the dashboard for `nav_admin_warn` notices. They auto-clear after dismissal or 7 days.
+
+### Common admin tasks
+
+| Task | Path |
+|------|------|
+| Update a product's meta description for SEO | wp-admin → Products → Edit → "SEO — Navigate Peptides" meta box |
+| Update a product's batch number / COA URL | wp-admin → Products → Edit → "Product Data" → check the `_nav_batch_number`, `_nav_testing_lab`, `_nav_coa_pdf` fields. If the DB write fails, an admin notice fires on the next page load |
+| Add a research article | wp-admin → Research Articles (CPT `nav_research`). Article schema, OG `article:*`, breadcrumb, and meta description auto-generate. Set a featured image for OG. |
+| Pause newsletter signups | Unhook `nav_subscribe_notify_admin` filter, OR make the REST endpoint return early. Currently rate-limited at 5/hour/IP |
+| Add a category | wp-admin → Products → Categories. To get it onto the homepage tile grid, also add to the hardcoded list in `front-page.php` + `archive-product.php` + `template-parts/category-grid.php` (4-place duplication, tracked as an audit cleanup item) |
+| Rotate GA4 ID | Edit `inc/business.php::NAV_GA4_ID` constant. CSP auto-allows GA hosts when this is non-empty |
+| Set Search Console verification | Edit `inc/business.php::NAV_GSC_VERIFICATION` constant (currently empty — paste the GSC token here) |
+| View subscriber list | wp-admin → Subscribers (CPT `nav_subscriber`). IP/UA columns show hashed values (post-PR #94) |
+
+### Debugging
+
+#### Site looks broken after deploy
+1. wp-admin dashboard → look for `nav_admin_warn` notices
+2. Browser console on the live URL → JS errors
+3. `view-source:` → check for orphaned `<%1$s>` placeholders, missing JSON-LD
+4. Revert the offending PR if obvious; the workflow re-deploys automatically
+
+#### JSON-LD validation fails on Google rich-results test
+`nav_seo_json_ld()` logs encode failures via `error_log` AND surfaces them via `nav_admin_warn`. Check wp-admin first. Then run the page through https://search.google.com/test/rich-results.
+
+#### WC checkout shows literal `%1$s` text near privacy link
+`nav_privacy_url()` returned empty. Verify the privacy-policy page exists with slug `privacy-policy` or `privacy`. The handler (PR #99) emits an admin notice when this happens.
+
+#### Model-viewer canvas is transparent on a PDP
+Browser console → look for CSP-blocked fetches. Likely a regression in `functions.php`'s CSP allowlist. Verify `ajax.googleapis.com` is in `connect-src`. Post-PR #99, model-viewer errors fire a GA4 `model_viewer_error` event too.
+
+#### 3D vial label looks wrong
+The label is an embedded image on the GLB material. To re-render: see `/tmp/build-ghkcu-label.py` archived in the project history (Pillow-based). Update the label PNG, then re-bake via `/tmp/regreen-all-vials.py` (Blender headless). The pipeline is described in commit messages on PRs #88–#90.
+
+### Things only Ian can do
+
+These require Ian's accounts. Don't email/Slack them — get Ian to do them:
+
+- **wp.com Calypso dashboard** — billing, plan changes, SSH key registration
+- **GoDaddy DNS** — domain records, TLD-level NS changes
+- **Google Search Console / Bing Webmaster / Yandex** — verify ownership, paste tokens into `inc/business.php`
+- **Argyle / NMI processor account** — merchant signup, MMP audit response
+- **GA4 property** — create/access, share GA4 ID
+- **Stripe** (if ever added) — payment gateway setup
+
+---
+
+## Known open items (inherited)
+
+Items the audit identified but didn't ship. Tracked in conversation history; not blocking launch.
+
+### Medium priority
+- **CSP `'unsafe-inline'` removal** — requires nonce-or-hash on every inline script (age-gate, consent, analytics, minicart). 1-2 day refactor; tightens XSS containment.
+- **JS scroll listener consolidation** (`assets/js/main.js`) — 3 independent scroll listeners + per-anchor click handler + body-wide MutationObserver. Collapse into rAF-batched delegated listeners.
+- **`.nav-product-single` CSS dedup** — same pattern as the `.nav-product-card` dedup that landed in PR #93, but `single` has more selectors and overlap risk. Needs a visual regression pass before deletion.
+- **Setup.sh duplicate category list** — `front-page.php` + `archive-product.php` + `template-parts/category-grid.php` + `404.php` all hardcode the same 6-category array. Extract to `nav_get_research_categories()` helper.
+
+### Low priority
+- **FAQPage / HowTo schema** on `template-quality-handling.php` / `template-quality-testing.php` / `template-about-standards.php` — content is already structured as steps/Q&A
+- **AggregateOffer** ships for variable products (PR #97), but no products are variable yet — feature ready, no consumers
+- **CSS dead-rule audit** on main.css (~6K LOC, was 8K LOC before PR #93)
+
+### Outstanding configuration (Ian-only)
+- **GSC / Bing / Yandex verification tokens** — `inc/business.php` placeholders are still empty strings. Site is verifiable but not yet verified.
+- **GA4 measurement ID** — `NAV_GA4_ID` constant set? Verify `inc/business.php` or the live wp-admin override.
+
+---
+
+## Things you'll want to do in your first week
+
+1. **Read `docs/COMPLIANCE`** end to end. Internalize the forbidden vocab. The `nav_seo_scrub()` map is your safety net but not a substitute for knowing the rules.
+2. **Get wp-admin access from Ian** — Editor role minimum, Administrator if you're going to be the maintainer. Set up a dedicated user, don't share Ian's.
+3. **Get GitHub repo access** — push to `main` triggers deploy; PRs are reviewable.
+4. **Generate an SSH key**, send the public half to Ian for wp.com Calypso registration. Test direct SSH to the live site with `wp --version` before relying on it for anything else.
+5. **Walk every public page** with your eyes — homepage, /compounds/, every category, every PDP, /quality/* subpages, /about/, /contact/, /cart/, /checkout/ (test mode). Note anything off; many of those pages were reviewed by audit but not by human eyes recently.
+6. **Run Lighthouse + Google rich-results test** on the homepage and a PDP. Establish a baseline.
+7. **Check wp-admin → Site Health** — should be green; if not, that's your first ticket.
+
+---
+
+## When in doubt
+
+- Compliance question → re-read `docs/COMPLIANCE`. If still unclear, ask Ian before shipping copy that mentions humans, dosing, therapy, treatment.
+- "Should I refactor X?" → check if X is in the open-items list above. If not, write the smallest change that solves the problem; the codebase has been polished, large refactors should be justified.
+- "Why is this hook at this priority?" → check the comment immediately above the `add_action`/`add_filter`. The audit pass left rationale comments on every non-default priority and most defensive guards.
+- "Is this safe to deploy?" → re-read the affected file, the PR diff, and `docs/DEPLOY`. If the change touches CSP, JSON-LD, age-gate, or anything in `inc/business.php`, do a manual smoke check after deploy — those are the highest-blast-radius surfaces.
+
+Welcome aboard.
