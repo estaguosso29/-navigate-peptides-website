@@ -4,6 +4,8 @@ Custom WordPress/WooCommerce storefront for Navigate Peptides — research-grade
 
 Live site: https://navigatepeptides.com
 
+> **New developer? Start at [`docs/HANDOFF`](docs/HANDOFF) — that's the single entry point.** It points at the other canonical docs in the right reading order.
+
 ## Stack
 
 - **WordPress** 6.5+ (`Requires at least: 6.5`), tested through 6.9
