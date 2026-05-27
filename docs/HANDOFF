@@ -221,15 +221,28 @@ Browser console → look for CSP-blocked fetches. Likely a regression in `functi
 #### 3D vial label looks wrong
 The label is an embedded image on the GLB material. To re-render: see `/tmp/build-ghkcu-label.py` archived in the project history (Pillow-based). Update the label PNG, then re-bake via `/tmp/regreen-all-vials.py` (Blender headless). The pipeline is described in commit messages on PRs #88–#90.
 
+### Vendor surface (consolidated under wp.com)
+
+Navigate Peptides has a deliberately small vendor footprint — almost everything is one of two accounts:
+
+- **wp.com Atomic Business account** (Ian's) owns:
+  - Domain registration + DNS for `navigatepeptides.com` (no GoDaddy, no Cloudflare — wp.com is the registrar)
+  - Hosting (Atomic infrastructure)
+  - SSH access for theme deploys
+  - Daily backups (Calypso → Jetpack → Backups, 30-day retention)
+- **`navigatepeptides@gmail.com`** is the canonical Google identity, tied to wp.com:
+  - Google Search Console property
+  - GA4 property (when wired)
+  - Site contact email
+  - Any future Google Workspace / Google Business profile
+
 ### Things only Ian can do
 
 These require Ian's accounts. Don't email/Slack them — get Ian to do them:
 
-- **wp.com Calypso dashboard** — billing, plan changes, SSH key registration
-- **GoDaddy DNS** — domain records, TLD-level NS changes
-- **Google Search Console / Bing Webmaster / Yandex** — verify ownership, paste tokens into `inc/business.php`
+- **wp.com Calypso dashboard** — billing, plan changes, domain/DNS edits, SSH key registration, backups/restore
+- **`navigatepeptides@gmail.com` login** — Search Console verification, GA4 setup, Bing Webmaster (linkable from GSC)
 - **Argyle / NMI processor account** — merchant signup, MMP audit response
-- **GA4 property** — create/access, share GA4 ID
 - **Stripe** (if ever added) — payment gateway setup
 
 ---
@@ -250,8 +263,9 @@ Items the audit identified but didn't ship. Tracked in conversation history; not
 - **CSS dead-rule audit** on main.css (~6K LOC, was 8K LOC before PR #93)
 
 ### Outstanding configuration (Ian-only)
-- **GSC / Bing / Yandex verification tokens** — `inc/business.php` placeholders are still empty strings. Site is verifiable but not yet verified.
-- **GA4 measurement ID** — `NAV_GA4_ID` constant set? Verify `inc/business.php` or the live wp-admin override.
+- **GSC verification token** — `NAV_GSC_VERIFICATION` in `inc/business.php` is still an empty string. Ian signs into `navigatepeptides@gmail.com`, adds the property in Search Console, picks "HTML tag" verification, pastes the token here. Site is verifiable but not yet verified.
+- **Bing Webmaster Tools** — `NAV_BING_VERIFICATION` empty. Bing accepts a "Sign in with Google" flow off `navigatepeptides@gmail.com` and can import the GSC property in one click.
+- **GA4 measurement ID** — set `NAV_GA4_ID` in `inc/business.php` (or wp-admin override). When non-empty, CSP auto-allows `googletagmanager.com` + `google-analytics.com`.
 
 ---
 
