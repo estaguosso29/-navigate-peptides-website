@@ -121,13 +121,15 @@ function nav_sitewide_disclaimer(): void {
 
 /**
  * Add structured data for compliance (visible to Mastercard scanners).
+ * Renders the FDA disclaimer so the bottom bar complements — rather
+ * than duplicates — the RUO line shown in the footer disclaimer box.
  */
 add_action('wp_footer', function () {
     ?>
     <div class="nav-compliance-footer" aria-label="Research use disclaimer">
         <div class="nav-container">
             <p class="nav-compliance-footer__text">
-                <?php echo esc_html(nav_get_disclaimer('sitewide')); ?>
+                <?php echo esc_html(nav_get_disclaimer('fda')); ?>
             </p>
         </div>
     </div>
