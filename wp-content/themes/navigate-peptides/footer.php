@@ -146,7 +146,9 @@
             <?php
             $nav_payments = [
                 'visa'       => __('Visa', 'navigate-peptides'),
-                'mastercard' => __('Mastercard', 'navigate-peptides'),
+                // Mastercard mark hidden per processor underwriting feedback
+                // (July 2026) — do not re-enable without processor sign-off.
+                // 'mastercard' => __('Mastercard', 'navigate-peptides'),
                 'amex'       => __('American Express', 'navigate-peptides'),
                 'discover'   => __('Discover', 'navigate-peptides'),
                 'bitcoin'    => __('Bitcoin', 'navigate-peptides'),
@@ -176,6 +178,7 @@
         <!-- Sitewide Compliance Disclaimer -->
         <div class="nav-footer__disclaimer">
             <p><?php echo esc_html(nav_get_disclaimer('sitewide')); ?></p>
+            <p><?php echo esc_html(nav_get_disclaimer('fda')); ?></p>
         </div>
 
 

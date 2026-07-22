@@ -1,0 +1,68 @@
+# Processor Underwriting Feedback — July 2026
+
+Requirements received from the payment processor (AllayPay underwriting)
+in July 2026. This doc records the request verbatim and how each item is
+implemented, so future audits don't "fix" the changes away.
+`docs/COMPLIANCE` remains the canonical baseline; this doc layers the
+July 2026 feedback on top of it.
+
+> Note: the screenshot we received was cropped — item 1 of the
+> processor's list and the reference example for item 4 were cut off.
+> Item 1 is still outstanding with the client.
+
+---
+
+## Item 2 — Full FDA disclaimer in the website footer
+
+Requested verbatim text:
+
+```
+The statements made regarding these products have not been evaluated
+by the Food and Drug Administration. The efficacy of these products
+has not been confirmed by FDA-approved research. These products are
+not intended to diagnose, treat, cure, or prevent any disease
+```
+
+**Implementation:** added as the canonical `nav_get_disclaimer('fda')`
+string in `inc/compliance.php` (single-sourced, like the RUO line) and
+rendered as a second paragraph directly under the sitewide RUO
+disclaimer in the footer (`footer.php`). Both disclaimers coexist: the
+RUO line remains on all its existing surfaces and in the JSON-LD
+`disambiguatingDescription`, satisfying the processor's scanner
+cross-check; the FDA text is footer-only, as requested.
+
+⚠️ The FDA string intentionally contains "diagnose / treat / cure /
+prevent" — terms banned everywhere else on the site (see
+`docs/COMPLIANCE` → Prohibited Language). They are permitted ONLY
+inside this canonical disclaimer. Do not edit, paraphrase, or scrub it.
+
+## Item 3 — Remove Mastercard card-brand logo from footer
+
+**Implementation:** the `'mastercard'` entry in the footer payment-marks
+array (`footer.php`) is commented out, not deleted; the SVG asset stays
+in the repo (`assets/images/payments/mastercard.svg`) but is no longer
+rendered. Do not re-enable without processor sign-off. Other brand
+marks (Visa, Amex, Discover, crypto, ACH) were not flagged.
+
+## Item 4 — Checkout must REQUIRE account creation
+
+Guest checkout is not allowed; an account must exist before an order
+can be placed.
+
+**Implementation:** enforced in code via `pre_option_*` filters in
+`inc/woocommerce.php` (not wp-admin Accounts & Privacy settings, so a
+settings edit on prod can never silently re-enable guest checkout):
+
+- `woocommerce_enable_guest_checkout` → forced `no`
+- `woocommerce_enable_signup_and_login_from_checkout` → forced `yes`
+- `woocommerce_enable_checkout_login_reminder` → forced `yes`
+- `woocommerce_registration_generate_username` → forced `yes`
+  (username derived from billing email — "nothing too detailed")
+- `woocommerce_registration_generate_password` → forced `no`
+  (checkout always shows a visible required "Create account password"
+  field; with both generation options on, WooCommerce hides the account
+  section and creates accounts silently, which would not read as
+  "account required" to a processor reviewer)
+
+The RUO acknowledgment checkbox requirement is unchanged and was
+verified to still render alongside the account fields.

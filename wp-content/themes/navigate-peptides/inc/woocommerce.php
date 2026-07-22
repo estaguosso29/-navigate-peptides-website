@@ -375,6 +375,23 @@ add_action('woocommerce_process_product_meta', 'nav_wc_save_product_meta');
  * ----------------------------------------------------------------*/
 
 /* ------------------------------------------------------------------
+ * Checkout: account creation REQUIRED — processor underwriting
+ * feedback (July 2026). Enforced via pre_option filters instead of
+ * the wp-admin Accounts & Privacy settings so a settings edit on
+ * prod can never silently re-enable guest checkout.
+ * ----------------------------------------------------------------*/
+add_filter('pre_option_woocommerce_enable_guest_checkout', fn() => 'no');
+add_filter('pre_option_woocommerce_enable_signup_and_login_from_checkout', fn() => 'yes');
+add_filter('pre_option_woocommerce_enable_checkout_login_reminder', fn() => 'yes');
+// Username auto-derived from email, password chosen by the customer.
+// generate_password must stay 'no': with both generation options on,
+// WooCommerce hides the account section entirely and creates accounts
+// silently — which would not read as "account required" to a processor
+// reviewer.
+add_filter('pre_option_woocommerce_registration_generate_username', fn() => 'yes');
+add_filter('pre_option_woocommerce_registration_generate_password', fn() => 'no');
+
+/* ------------------------------------------------------------------
  * Checkout: RUO acknowledgment checkbox
  * ----------------------------------------------------------------*/
 add_action('woocommerce_review_order_before_submit', function () {
