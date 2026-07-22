@@ -1,10 +1,11 @@
 name: Deploy theme to wordpress.com
 
 # Push theme files to the wordpress.com server over SSH on every main-branch
-# push that touches the theme directory. Auth is key-based — wordpress.com's
-# password SSH is unreliable; the key was generated locally, public half
-# registered on wordpress.com via the dashboard, private half lives in this
-# repo's secrets as WPCOM_SSH_KEY.
+# push that touches the theme directory. Auth: if the WPCOM_SSH_PASSWORD
+# secret is set, password auth is used (via sshpass); otherwise falls back
+# to key auth — the key was generated locally, public half registered on
+# wordpress.com via the dashboard, private half lives in this repo's
+# secrets as WPCOM_SSH_KEY. At least one of the two must be configured.
 
 on:
   push:
@@ -38,20 +39,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify secrets are configured
+      - name: Verify secrets and pick auth method
+        env:
+          HAS_PASSWORD: ${{ secrets.WPCOM_SSH_PASSWORD != '' }}
+          HAS_KEY: ${{ secrets.WPCOM_SSH_KEY != '' }}
         run: |
           missing=""
           [ -z "${{ secrets.WPCOM_SSH_HOST }}" ]   && missing="$missing WPCOM_SSH_HOST"
           [ -z "${{ secrets.WPCOM_SSH_USER }}" ]   && missing="$missing WPCOM_SSH_USER"
-          [ -z "${{ secrets.WPCOM_SSH_KEY }}" ]    && missing="$missing WPCOM_SSH_KEY"
           [ -z "${{ secrets.WPCOM_THEME_PATH }}" ] && missing="$missing WPCOM_THEME_PATH"
           if [ -n "$missing" ]; then
             echo "::error::Missing required secret(s):$missing"
             echo "See docs/DEPLOY → Path B for setup."
             exit 1
           fi
+          # Password wins when both are configured.
+          if [ "$HAS_PASSWORD" = "true" ]; then
+            echo "AUTH_METHOD=password" >> "$GITHUB_ENV"
+            echo "::notice::Using password auth (WPCOM_SSH_PASSWORD is set)."
+          elif [ "$HAS_KEY" = "true" ]; then
+            echo "AUTH_METHOD=key" >> "$GITHUB_ENV"
+            echo "::notice::Using key auth (WPCOM_SSH_KEY)."
+          else
+            echo "::error::Set WPCOM_SSH_PASSWORD or WPCOM_SSH_KEY — neither is configured."
+            echo "See docs/DEPLOY → Path B for setup."
+            exit 1
+          fi
+
+      - name: Install sshpass
+        if: env.AUTH_METHOD == 'password'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
       - name: Load SSH key into agent
+        if: env.AUTH_METHOD == 'key'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.WPCOM_SSH_KEY }}
@@ -73,11 +93,20 @@ jobs:
           USER:    ${{ secrets.WPCOM_SSH_USER }}
           HOST:    ${{ secrets.WPCOM_SSH_HOST }}
           TARGET:  ${{ secrets.WPCOM_THEME_PATH }}
+          # sshpass -e reads the password from SSHPASS; empty in key mode.
+          SSHPASS: ${{ secrets.WPCOM_SSH_PASSWORD }}
         run: |
           DRY=""
           if [ "$DRY_RUN" = "true" ]; then
             DRY="--dry-run -v"
             echo "::notice::DRY RUN — no files will be uploaded."
+          fi
+
+          SSH_OPTS="-p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts"
+          RSYNC="rsync"
+          if [ "$AUTH_METHOD" = "password" ]; then
+            RSYNC="sshpass -e rsync"
+            SSH_OPTS="$SSH_OPTS -o PreferredAuthentications=password -o PubkeyAuthentication=no"
           fi
 
           # --delete keeps the server exactly matching the repo's theme dir.
@@ -87,13 +116,13 @@ jobs:
           # itself) into $TARGET. $TARGET is the absolute path to the theme
           # directory on the wordpress.com server:
           # /srv/htdocs/wp-content/themes/navigate-peptides
-          rsync -avz --delete $DRY \
+          $RSYNC -avz --delete $DRY \
             --exclude '.DS_Store' \
             --exclude '.git' \
             --exclude '.gitignore' \
             --exclude '.github' \
             --exclude 'node_modules' \
-            -e "ssh -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            -e "ssh $SSH_OPTS" \
             wp-content/themes/navigate-peptides/ \
             "${USER}@${HOST}:${TARGET}/"
 

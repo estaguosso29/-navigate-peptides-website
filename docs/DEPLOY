@@ -104,6 +104,7 @@ Use this if Path A is unavailable, if you want multi-environment deploys (stagin
 | `WPCOM_SSH_PORT` | `22` |
 | `WPCOM_SSH_USER` | `<yoursite>.wordpress.com` (matches the user you SSH as) |
 | `WPCOM_SSH_KEY` | The **private** key that pairs with the public key registered on wordpress.com (full multi-line PEM/OpenSSH content including the BEGIN/END lines) |
+| `WPCOM_SSH_PASSWORD` | *(optional)* SSH/SFTP password from the wordpress.com dashboard. **If set, the workflow deploys with password auth and ignores the key.** Leave unset to use `WPCOM_SSH_KEY`. |
 | `WPCOM_THEME_PATH` | `/srv/htdocs/wp-content/themes/navigate-peptides` |
 
 Generate a dedicated ed25519 keypair just for this deploy (don't reuse a personal key):
@@ -112,7 +113,12 @@ ssh-keygen -t ed25519 -f ~/.ssh/wpcom_deploy -N "" -C "wpcom-deploy"
 ```
 Paste the contents of `~/.ssh/wpcom_deploy.pub` into wordpress.com's SSH key dashboard. Add the contents of `~/.ssh/wpcom_deploy` (the private one) as the `WPCOM_SSH_KEY` secret in GitHub.
 
-Password auth is not supported — wordpress.com's SSH rejects password attempts consistently in our testing, so the workflow is key-only.
+Auth selection: the workflow uses the password (via `sshpass`) when
+`WPCOM_SSH_PASSWORD` is set, and falls back to `WPCOM_SSH_KEY` otherwise;
+at least one of the two must be configured. Historical note: wordpress.com's
+SSH rejected password attempts consistently in earlier testing — if password
+deploys fail with "Authentication failed", remove the `WPCOM_SSH_PASSWORD`
+secret to fall back to key auth.
 
 ### 3. Enable the workflow
 
