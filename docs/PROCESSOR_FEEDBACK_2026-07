@@ -24,10 +24,13 @@ not intended to diagnose, treat, cure, or prevent any disease
 ```
 
 **Implementation:** added as the canonical `nav_get_disclaimer('fda')`
-string in `inc/compliance.php` (single-sourced, like the RUO line) and
-rendered as a second paragraph directly under the sitewide RUO
-disclaimer in the footer (`footer.php`). Both disclaimers coexist: the
-RUO line remains on all its existing surfaces and in the JSON-LD
+string in `inc/compliance.php` (single-sourced, like the RUO line),
+rendered as the text of the bottom compliance bar
+(`nav-compliance-footer`, the `wp_footer` hook in `inc/compliance.php`)
+— which previously repeated the RUO line already shown in the footer
+disclaimer box directly above it. The two footer disclaimer locations
+now complement each other: box = RUO line, bottom bar = FDA text.
+The RUO line remains on all its existing surfaces and in the JSON-LD
 `disambiguatingDescription`, satisfying the processor's scanner
 cross-check; the FDA text is footer-only, as requested.
 

@@ -178,7 +178,6 @@
         <!-- Sitewide Compliance Disclaimer -->
         <div class="nav-footer__disclaimer">
             <p><?php echo esc_html(nav_get_disclaimer('sitewide')); ?></p>
-            <p><?php echo esc_html(nav_get_disclaimer('fda')); ?></p>
         </div>
 
 

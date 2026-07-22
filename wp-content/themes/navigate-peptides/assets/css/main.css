@@ -2759,10 +2759,6 @@ a.nav-contact-channel__value:hover {
     margin: 0;
 }
 
-.nav-footer__disclaimer p + p {
-    margin-top: 10px;
-}
-
 /* Visible business identity block — legal entity, mailing address,
    phone (and email when DNS is live). Required by processor
    underwriters; sourced from inc/business.php constants. */
