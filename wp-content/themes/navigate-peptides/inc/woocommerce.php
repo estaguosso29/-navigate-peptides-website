@@ -403,19 +403,15 @@ add_action('woocommerce_review_order_before_submit', function () {
     ]);
 });
 
-add_action('woocommerce_checkout_process', function () {
-    // Nonce verification is handled by WooCommerce core checkout form processing.
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing
-    $ack = isset($_POST['nav_ruo_acknowledgment'])
-        ? sanitize_text_field(wp_unslash($_POST['nav_ruo_acknowledgment']))
-        : '';
-    if (empty($ack)) {
-        wc_add_notice(
-            __('You must acknowledge the research-use-only agreement before completing your order.', 'navigate-peptides'),
-            'error'
-        );
-    }
-});
+// Server-side enforcement of the acknowledgment lives on
+// woocommerce_after_checkout_validation (below), NOT here. A second copy
+// used to run on woocommerce_checkout_process testing the same $_POST key
+// with the same empty() check; WC_Checkout::process_checkout() fires
+// checkout_process (class-wc-checkout.php:1312) and then converts every
+// after_checkout_validation error into a notice (:1336-1341), so one
+// unchecked box produced two stacked errors on screen. The surviving
+// handler is the stronger of the two — it carries a machine-readable
+// error code, which the checkout-failure logger reads.
 
 /* ------------------------------------------------------------------
  * Cart/Checkout: sitewide disclaimer is now rendered inline by
@@ -504,17 +500,29 @@ add_action('woocommerce_after_checkout_validation', function ($data, $errors) {
  * Log checkout failures for diagnosis. Without this, declines and
  * validation errors are invisible unless the gateway emails — and even
  * then, the theme has no record of which page the user abandoned on.
+ *
+ * Hook is woocommerce_after_checkout_validation. This previously bound
+ * 'woocommerce_checkout_validation', which WooCommerce does not fire —
+ * WC_Checkout only fires woocommerce_checkout_process and
+ * woocommerce_after_checkout_validation — so this logger never ran and
+ * the silent-failure loop PR #95 set out to close stayed open here.
+ *
+ * Priority 20 (not the default 10) so it runs AFTER the RUO
+ * acknowledgment validator registered at 10 above, and therefore
+ * observes the nav_ruo_required code it adds to $errors.
  * ----------------------------------------------------------------*/
-add_action('woocommerce_checkout_validation', function ($data, $errors) {
+add_action('woocommerce_after_checkout_validation', function ($data, $errors) {
     if (!empty($errors->get_error_messages())) {
         $codes = array_unique($errors->get_error_codes());
         error_log(sprintf(
             '[nav_checkout] validation failed codes=%s ip=%s',
             implode(',', $codes),
-            nav_contact_client_ip()
+            // nav_contact_client_ip() returns a RAW address — never let it
+            // reach the log unredacted (see CLAUDE.md, "Never log raw PII").
+            nav_redact(nav_contact_client_ip())
         ));
     }
-}, 10, 2);
+}, 20, 2);
 
 add_action('woocommerce_payment_complete_order_status', function ($status, $order_id) {
     error_log(sprintf('[nav_checkout] payment completed order=%d status=%s', $order_id, $status));

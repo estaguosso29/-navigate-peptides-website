@@ -43,6 +43,11 @@
     --nav-font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --nav-font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
 
+    /* Eye glyph for the show/hide-password toggle WooCommerce injects
+       after password fields. Used as a mask so the button picks up theme
+       colour rather than shipping a second coloured asset. */
+    --nav-eye-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.04 12.32a1 1 0 0 1 0-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3.01 9.96 7.18a1 1 0 0 1 0 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3.01-9.96-7.18Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+
     /* Spacing */
     --nav-gap-xs: 4px;
     --nav-gap-sm: 8px;
@@ -2633,7 +2638,17 @@ a.nav-contact-channel__value:hover {
     margin: 0;
     background: transparent;
 }
-.woocommerce form .form-row label {
+/* Field labels only — NOT checkbox labels.
+ *
+ * This selector is (0,2,2), which outranks both `.nav-ruo-checkbox label`
+ * and the shared `label.checkbox` rules in woocommerce.css. Without the
+ * :not() guards it forced display:block + uppercase + mono tracking onto
+ * every checkbox label inside a .form-row, so the RUO acknowledgment, the
+ * terms consent, and "remember me" rendered as shouty uppercase blocks
+ * with the checkbox stranded on the line above. "Ship to a different
+ * address?" escaped only because it sits in an <h3>, not a .form-row —
+ * which is exactly how the inconsistency was traced. */
+.woocommerce form .form-row label:not(.checkbox):not(.woocommerce-form__label-for-checkbox) {
     font-family: var(--nav-font-mono);
     font-size: 11px;
     letter-spacing: 0.14em;
@@ -4845,9 +4860,20 @@ a:focus-visible {
 .nav-product-single__purchase .quantity .qty:focus-visible {
     outline: 0;
 }
+/* Native steppers stay VISIBLE.
+ *
+ * This previously set -webkit-appearance:none, which hid the up/down
+ * arrows entirely — at (0,3,0) it outranks the .woocommerce .quantity
+ * rules in woocommerce.css, so it won wherever it applied. Combined with
+ * the wrapper's leftover 12px right margin, the control read as a text
+ * box with a broken empty strip beside it rather than a stepper.
+ *
+ * color-scheme:dark (set in woocommerce.css) is what makes the UA paint
+ * the arrows to suit the dark field. */
 .nav-product-single__purchase .quantity .qty::-webkit-outer-spin-button,
 .nav-product-single__purchase .quantity .qty::-webkit-inner-spin-button {
-    -webkit-appearance: none;
+    -webkit-appearance: inner-spin-button;
+    opacity: 1;
     margin: 0;
 }
 
@@ -5188,12 +5214,19 @@ a:focus-visible {
     margin: 0;
 }
 .nav-product-single__purchase .woocommerce-variation-description p { margin: 0; }
+/* Variable-product price must match the simple-product price treatment
+ * (.nav-product-single__price — mono 34px/500). This block previously used
+ * the Playfair display face at 36px, so picking a size on a variable
+ * product swapped the price from mono figures to serif old-style figures
+ * mid-page. The child rule below forces font-family/size to `inherit`, so
+ * this container is the single place the treatment is decided. */
 .nav-product-single__purchase .woocommerce-variation-price {
-    font-family: var(--nav-font-display);
-    font-size: 36px;
+    font-family: var(--nav-font-mono);
+    font-size: 34px;
+    font-weight: 500;
     line-height: 1;
     color: var(--nav-text-primary);
-    letter-spacing: -0.02em;
+    letter-spacing: 0.01em;
     margin: 0;
     display: flex;
     align-items: baseline;

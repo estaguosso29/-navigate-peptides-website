@@ -61,6 +61,14 @@ add_action('wp_footer', function () {
  * without a full reload. Gated on wp_doing_ajax() — without the guard
  * this filter ran on every non-AJAX page render too, double-invoking
  * woocommerce_mini_cart() and doubling cart-totalization work per request.
+ *
+ * The wrapper's class list MUST stay byte-identical to the server render in
+ * nav_render_minicart() above. WC's cart-fragments.js applies fragments with
+ * $(key).replaceWith(value) — on the AJAX response AND on the sessionStorage
+ * cached path that runs on every page load — so the element here REPLACES the
+ * drawer body wholesale. Emitting only `widget_shopping_cart_content` dropped
+ * `nav-minicart__body`, and every drawer style in woocommerce.css is scoped to
+ * that class, so the whole drawer rendered unstyled. Change one, change both.
  */
 add_filter('woocommerce_add_to_cart_fragments', function (array $fragments) {
     if (!wp_doing_ajax()) {
@@ -68,7 +76,7 @@ add_filter('woocommerce_add_to_cart_fragments', function (array $fragments) {
     }
     ob_start();
     ?>
-    <div class="widget_shopping_cart_content"><?php woocommerce_mini_cart(); ?></div>
+    <div class="nav-minicart__body widget_shopping_cart_content"><?php woocommerce_mini_cart(); ?></div>
     <?php
     $fragments['div.widget_shopping_cart_content'] = ob_get_clean();
     return $fragments;

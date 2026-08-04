@@ -295,6 +295,26 @@ add_action('send_headers', function () {
     $script_src  = "'self' 'unsafe-inline' 'wasm-unsafe-eval' "
                  . "https://ajax.googleapis.com https://fonts.googleapis.com "
                  . "https://*.wp.com https://*.wordpress.com";
+
+    // 'unsafe-eval' on product pages ONLY.
+    //
+    // WooCommerce's variation form calls wp.template() -> _.template()
+    // (underscore), which compiles the template with `new Function()`.
+    // 'wasm-unsafe-eval' permits WebAssembly compilation but NOT
+    // new Function/eval, so on a variable product the browser threw
+    //   Uncaught EvalError: ... 'unsafe-eval' is not an allowed source
+    //   at m.template (underscore) <- wp-util.js <- VariationForm.onFoundVariation
+    // That exception aborted onFoundVariation before it wrote
+    // input[name="variation_id"], so picking a size left Add to Cart dead.
+    //
+    // Scoped to is_product() deliberately: only the PDP enqueues
+    // wp-util/underscore/add-to-cart-variation (verified — no other
+    // template loads them). Checkout, cart, account, and content pages —
+    // where XSS would actually reach payment and PII — keep the strict
+    // no-eval policy.
+    if (function_exists('is_product') && is_product()) {
+        $script_src .= " 'unsafe-eval'";
+    }
     // connect-src INCLUDES ajax.googleapis.com — model-viewer's main script
     // XHRs for its runtime workers, WASM decoders, and HDR environment
     // textures. Without this, the canvas stays transparent because those
