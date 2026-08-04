@@ -4,6 +4,15 @@
 .DS_Store
 node_modules/
 
+# Local Docker dev environment (local-only, never commit)
+docker/
+
+# Database dumps at repo root. The prod snapshot
+# (navigatepeptides_com.sql) contains real customer PII — order records,
+# emails, addresses. It must never be committed. See CLAUDE.md.
+/*.sql
+/*.sql.gz
+
 # Build / temp
 /tmp/
 *.swp

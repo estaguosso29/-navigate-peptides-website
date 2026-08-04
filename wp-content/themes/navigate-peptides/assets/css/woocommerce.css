@@ -472,10 +472,42 @@
     border-top: 1px solid rgba(234, 234, 234, 0.08);
 }
 
-@media (min-width: 640px) {
+/* Specs go two-up based on the DETAILS COLUMN's own width, not the
+ * viewport.
+ *
+ * The old rule was @media (min-width: 640px), but the details column is
+ * only about half the viewport once .nav-product-single__grid splits in
+ * two. On a ~1100px laptop that left each spec row ~179px, and since
+ * .nav-spec hard-codes a 130px label track the value collapsed to 35px —
+ * with word-break:break-word, "Lyophilized" rendered as "Lyop/hili/zed"
+ * and the molecular weight shattered one character per line.
+ *
+ * A container query tracks the real available width, so this stays
+ * correct if the page grid is ever re-proportioned. */
+.nav-product-single__details {
+    container-type: inline-size;
+    container-name: navpdp;
+}
+
+/* 700px, not 600: a comfortable two-up row needs the 130px label track
+ * plus its 14px gap plus ~180px of value, twice, plus the 48px column
+ * gap. Below that the long values (STORAGE, FORM) technically fit but
+ * concertina into tall 130px-wide stacks. */
+@container navpdp (min-width: 700px) {
     .nav-product-single__specs {
         grid-template-columns: 1fr 1fr;
         column-gap: 48px;
+    }
+}
+
+/* Last-resort guard: if a row is ever narrow enough that a 130px label
+ * plus its value cannot coexist, stack them instead of shredding the
+ * value. Also covers browsers without container-query support, where the
+ * specs list simply stays one-up. */
+@container navpdp (max-width: 330px) {
+    .nav-spec {
+        grid-template-columns: 1fr;
+        gap: 2px;
     }
 }
 
@@ -629,6 +661,13 @@
 }
 
 /* Trust strip — batch + purity + COA download, above the Add-to-Cart row */
+/* Selector carries `.woocommerce` purely to outrank main.css:5687, which
+ * re-declares this strip as a rigid `grid-template-columns: 1fr 1fr auto`
+ * at (0,2,0). That fixed 3-track grid ignores how wide the details column
+ * actually is, so in a ~400px column the HPLC purity sentence was forced
+ * into a ~180px track and broke across five lines. flex-wrap reflows
+ * instead. Do not lower this specificity while main.css:5687 stands. */
+.woocommerce .nav-product-single__trust-strip,
 .nav-product-single__trust-strip {
     display: flex;
     flex-wrap: wrap;
@@ -749,6 +788,42 @@
     border: 1px solid rgba(234, 234, 234, 0.1);
     border-radius: 2px;
     margin-right: 12px;
+}
+
+/* Quantity field — single bordered box, with WORKING native steppers.
+ *
+ * Two bugs lived here. (1) main.css already gives .quantity its own
+ * border + background, and the rule above gave the inner input a SECOND
+ * border, so the control painted as a box inside a box. (2) the input
+ * carried margin-right:12px (meant to space it from Add to Cart), which
+ * left a 12px strip of the bordered wrapper visible past the input's
+ * right edge — the detached sliver that read as a broken arrow control.
+ * Spacing belongs on the wrapper, so it moves there.
+ *
+ * The steppers are deliberately NOT hidden: color-scheme:dark is what
+ * makes the UA paint them dark instead of as a light slab on the dark
+ * field, which was the actual complaint. Extra right padding reserves
+ * room so they never overlap the centred digits. */
+.woocommerce .quantity {
+    margin-right: 12px;
+}
+
+.woocommerce .quantity input.qty,
+.woocommerce-cart-form .quantity input {
+    color-scheme: dark;
+    -moz-appearance: auto;
+    appearance: auto;
+    margin-right: 0;
+    border: none;
+    background-color: transparent;
+    padding-right: 4px;
+}
+
+/* Keep the steppers permanently visible rather than hover-only, so the
+ * control doesn't look like an inert text box at rest. */
+.woocommerce .quantity input.qty::-webkit-inner-spin-button,
+.woocommerce-cart-form .quantity input::-webkit-inner-spin-button {
+    opacity: 1;
 }
 
 /* Disclaimer block */
@@ -908,11 +983,27 @@
     color: var(--nav-text-primary);
 }
 
+/* position/border-radius are load-bearing overrides, not decoration.
+ *
+ * main.css:3373 styles this same pseudo-element as the OLD design: an
+ * absolutely-positioned round dot paired with padding-left on the li.
+ * The li above was since rebuilt as a grid with a 16px marker track,
+ * which assumes ::before is an in-flow GRID ITEM. Both rules are (0,1,1),
+ * so this file wins on appearance — but `position: absolute` is declared
+ * only in main.css and therefore survived, taking the marker out of flow.
+ * With no in-flow first item the bare text node became the anonymous grid
+ * item and landed in the 16px track, so every Research Focus entry
+ * rendered one word per line in an 87px column.
+ *
+ * Forcing static puts the marker back in the grid. Do not drop these two
+ * declarations while main.css still carries the old rule. */
 .nav-tab-content__list li::before {
     content: "";
+    position: static;
     width: 10px;
     height: 1px;
     margin-top: 12px;
+    border-radius: 0;
     background-color: var(--cat-color, var(--nav-text-muted));
 }
 
@@ -1243,7 +1334,16 @@
     margin-bottom: 18px;
 }
 
-.woocommerce-checkout .form-row label {
+/* Field labels ("TOWN / CITY", "ZIP CODE") only.
+ *
+ * The :not() guards are load-bearing. This selector is
+ * (0,2,1) — higher than `.nav-ruo-checkbox label` (0,1,1) below — so
+ * without them it also captured every CHECKBOX label on the page and
+ * forced display:block + uppercase + 0.18em tracking onto them. The RUO
+ * acknowledgment, the terms consent, "ship to a different address", and
+ * "remember me" all rendered as shouty uppercase paragraphs with the
+ * checkbox stranded on its own line above the text. */
+.woocommerce-checkout .form-row label:not(.checkbox):not(.woocommerce-form__label-for-checkbox) {
     display: block;
     margin-bottom: 6px;
     font-family: var(--nav-font-body);
@@ -1310,6 +1410,363 @@
     width: 16px;
     height: 16px;
     accent-color: var(--nav-cat-dermal);
+}
+
+/* ----------  CHECKBOXES (shared)  ----------
+ *
+ * Covers every checkbox WooCommerce renders on checkout and the inline
+ * login form: terms consent, "ship to a different address", "remember
+ * me", and the RUO acknowledgment. They share
+ * .woocommerce-form__label-for-checkbox; the RUO one carries a bare
+ * .checkbox, so both selectors are needed.
+ *
+ * color-scheme:dark is what stops the box itself rendering as a stark
+ * white native control on the dark page — accent-color alone only tints
+ * the CHECKED state, leaving the unchecked box white. */
+/* Deliberately block + absolutely-positioned box rather than flex.
+ *
+ * With flex, WooCommerce's trailing <span class="required">*</span>
+ * became its own flex item and was pushed to the far right of the row,
+ * stranded metres away from the sentence it belongs to. Keeping the
+ * label a block lets the text and the asterisk flow as normal inline
+ * content, and the checkbox is lifted out of that flow. */
+.woocommerce label.checkbox,
+.woocommerce-checkout label.checkbox,
+.woocommerce label.woocommerce-form__label-for-checkbox,
+.woocommerce-checkout label.woocommerce-form__label-for-checkbox {
+    display: block;
+    position: relative;
+    padding-left: 28px;
+    margin-bottom: 0;
+    font-family: var(--nav-font-body);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.6;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--nav-text-secondary);
+    cursor: pointer;
+}
+
+.woocommerce label.checkbox input[type="checkbox"],
+.woocommerce-checkout label.checkbox input[type="checkbox"],
+.woocommerce label.woocommerce-form__label-for-checkbox input[type="checkbox"],
+.woocommerce-checkout label.woocommerce-form__label-for-checkbox input[type="checkbox"] {
+    position: absolute;
+    left: 0;
+    top: 0.2em;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--nav-accent);
+    color-scheme: dark;
+    cursor: pointer;
+}
+
+/* Keep the required asterisk tight to the sentence it marks. */
+.woocommerce label.checkbox .required,
+.woocommerce-checkout label.checkbox .required,
+.woocommerce-checkout label.woocommerce-form__label-for-checkbox .required {
+    margin-left: 2px;
+    border: 0;
+    text-decoration: none;
+}
+
+/* ----------  SHOW / HIDE PASSWORD TOGGLE  ----------
+ *
+ * WooCommerce injects <button class="show-password-input"> after every
+ * password field and woocommerce-general (dequeued) is what normally
+ * gives it its eye icon and absolute placement. Without that it rendered
+ * as a naked 4x4px button sitting below the field — the stray dot under
+ * "Create account password" and under the login form's password box.
+ * Re-implemented here as an inset icon button, drawn with a masked SVG
+ * so it inherits the theme colour instead of shipping another asset. */
+/* Two different wrappers ship depending on the form: checkout renders
+ * span.woocommerce-input-wrapper.password-input, while the inline login
+ * form renders a bare span.password-input. Cover both, or the toggle
+ * stays a 4x4px dot on whichever one is missed. */
+.woocommerce-input-wrapper,
+.password-input,
+.woocommerce-form__input-password {
+    position: relative;
+    display: block;
+}
+
+.woocommerce-input-wrapper .show-password-input,
+.password-input .show-password-input,
+.woocommerce-form__input-password .show-password-input {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background-color: var(--nav-text-muted);
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 200ms var(--nav-ease);
+    -webkit-mask: var(--nav-eye-icon) center / 20px 20px no-repeat;
+    mask: var(--nav-eye-icon) center / 20px 20px no-repeat;
+}
+
+.woocommerce-input-wrapper .show-password-input:hover,
+.woocommerce-input-wrapper .show-password-input:focus-visible,
+.password-input .show-password-input:hover,
+.password-input .show-password-input:focus-visible {
+    opacity: 1;
+    background-color: var(--nav-text-primary);
+}
+
+.woocommerce-input-wrapper .show-password-input.display-password,
+.password-input .show-password-input.display-password {
+    background-color: var(--nav-accent);
+    opacity: 1;
+}
+
+/* Reserve room so a long value never slides under the toggle. WC marks
+ * the wrapper `pass` server-side and adds `password-input` from JS once
+ * the toggle initialises — match both so the padding is never missing. */
+.woocommerce-input-wrapper.pass input.input-text,
+.password-input input.input-text,
+.woocommerce-form__input-password input.input-text {
+    padding-right: 46px;
+}
+
+/* The login form packs the "Remember me" label AND the submit button
+ * into one <p class="form-row">. Now that checkbox labels are block-level
+ * the button wraps onto its own line, and without this it butted
+ * straight up against the label with no breathing room.
+ *
+ * Needs the extra class + element to outrank the shared checkbox rule
+ * above, which sets margin-bottom:0 at (0,2,1). */
+.woocommerce-checkout .woocommerce-form-login label.woocommerce-form-login__rememberme {
+    margin-bottom: 16px;
+}
+
+/* WC wraps the terms text in its own span; keep it inline with the box. */
+.woocommerce-terms-and-conditions-checkbox-text {
+    display: inline;
+}
+
+/* ----------  SELECT2 / SELECTWOO  ----------
+ *
+ * WooCommerce upgrades the country and state selects into selectWoo
+ * (select2) widgets, which REPLACE the <select> with a
+ * span.select2-container. The .form-row select rules above therefore
+ * never reach them, and because functions.php dequeues
+ * woocommerce-general (which ships 16 select2 rules) nothing else styled
+ * them either — the State field rendered as a stark white light-theme
+ * widget on the dark checkout. */
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple {
+    height: auto;
+    min-height: 48px;
+    padding: 7px 6px;
+    background-color: rgba(10, 16, 14, 0.5);
+    border: 1px solid rgba(234, 234, 234, 0.1);
+    border-radius: 3px;
+    transition: border-color 240ms var(--nav-ease), background-color 240ms var(--nav-ease);
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    padding-left: 10px;
+    line-height: 32px;
+    font-family: var(--nav-font-body);
+    font-size: 14px;
+    color: var(--nav-text-primary);
+}
+
+.select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: var(--nav-text-muted);
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow b {
+    border-color: var(--nav-text-muted) transparent transparent;
+}
+
+.select2-container--default.select2-container--open .select2-selection--single {
+    border-color: rgba(234, 234, 234, 0.3);
+    background-color: rgba(10, 16, 14, 0.7);
+}
+
+.select2-container--default.select2-container--open
+    .select2-selection--single .select2-selection__arrow b {
+    border-color: transparent transparent var(--nav-text-muted);
+}
+
+/* The dropdown renders in a portal at <body>, outside .woocommerce —
+ * these selectors must stay unscoped or the panel keeps its white default. */
+.select2-dropdown {
+    background-color: var(--nav-bg-secondary);
+    border: 1px solid rgba(234, 234, 234, 0.15);
+    border-radius: 3px;
+}
+
+.select2-container--default .select2-search--dropdown .select2-search__field {
+    padding: 10px 12px;
+    font-family: var(--nav-font-body);
+    font-size: 14px;
+    color: var(--nav-text-primary);
+    background-color: rgba(10, 16, 14, 0.6);
+    border: 1px solid rgba(234, 234, 234, 0.15);
+    border-radius: 3px;
+    color-scheme: dark;
+}
+
+.select2-container--default .select2-results__option {
+    padding: 10px 14px;
+    font-family: var(--nav-font-body);
+    font-size: 14px;
+    color: var(--nav-text-secondary);
+    background-color: transparent;
+}
+
+.select2-container--default .select2-results__option--highlighted[aria-selected],
+.select2-container--default .select2-results__option--highlighted[data-selected] {
+    background-color: rgba(156, 132, 62, 0.22);
+    color: var(--nav-text-primary);
+}
+
+.select2-container--default .select2-results__option[aria-selected="true"],
+.select2-container--default .select2-results__option[data-selected="true"] {
+    background-color: rgba(234, 234, 234, 0.06);
+    color: var(--nav-text-primary);
+}
+
+.select2-results__options {
+    scrollbar-color: rgba(234, 234, 234, 0.25) transparent;
+}
+
+/* ----------  LIST MARKERS  ----------
+ *
+ * woocommerce-general (dequeued in functions.php) is what normally
+ * strips markers off WooCommerce's structural lists. Without it the
+ * payment-methods list rendered a disc bullet next to the "no available
+ * payment methods" notice, and the same applies to the notice groups and
+ * the theme's own trust strip. These are layout containers, not prose
+ * lists — none of them should show markers. */
+.woocommerce-checkout ul.payment_methods,
+.woocommerce-checkout ul.wc_payment_methods,
+.woocommerce-checkout ul.woocommerce-shipping-methods,
+.woocommerce-checkout ul.woocommerce-error,
+.woocommerce-checkout ul.woocommerce-info,
+.woocommerce-checkout ul.woocommerce-message,
+.woocommerce-checkout .woocommerce-NoticeGroup ul,
+.nav-checkout-trust {
+    list-style: none;
+    margin-left: 0;
+    padding-left: 0;
+}
+
+.woocommerce-checkout ul.payment_methods > li,
+.woocommerce-checkout ul.wc_payment_methods > li,
+.woocommerce-checkout ul.woocommerce-shipping-methods > li,
+.woocommerce-checkout ul.woocommerce-error > li,
+.woocommerce-checkout ul.woocommerce-info > li,
+.woocommerce-checkout ul.woocommerce-message > li,
+.woocommerce-checkout .woocommerce-NoticeGroup ul > li,
+.nav-checkout-trust > li {
+    list-style: none;
+}
+
+/* Variation price treatment is set in main.css on
+ * .nav-product-single__purchase .woocommerce-variation-price — its child
+ * rule forces font-family/size to `inherit` at (0,3,0), so styling the
+ * children from here cannot win. Change it there, not here. */
+
+/* ----------  CHECKOUT ORDER REVIEW TABLE  ----------
+ *
+ * woocommerce-general shipped 10 shop_table rules; dequeuing it left this
+ * table with browser-default rendering, so "Product / Subtotal" collapsed
+ * into cramped, misaligned columns. */
+.woocommerce-checkout-review-order-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-family: var(--nav-font-body);
+    font-size: 14px;
+}
+
+.woocommerce-checkout-review-order-table th,
+.woocommerce-checkout-review-order-table td {
+    padding: 14px 0;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(234, 234, 234, 0.08);
+}
+
+.woocommerce-checkout-review-order-table thead th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--nav-text-muted);
+    padding-bottom: 12px;
+}
+
+/* Money column right-aligned so totals line up as a column of figures. */
+.woocommerce-checkout-review-order-table td:last-child,
+.woocommerce-checkout-review-order-table th:last-child,
+.woocommerce-checkout-review-order-table tfoot td {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.woocommerce-checkout-review-order-table .product-name {
+    width: 65%;
+    padding-right: 16px;
+    color: var(--nav-text-secondary);
+    line-height: 1.5;
+}
+
+.woocommerce-checkout-review-order-table .product-quantity,
+.woocommerce-checkout-review-order-table .product-name strong.product-quantity {
+    font-family: var(--nav-font-mono);
+    font-weight: 400;
+    color: var(--nav-text-muted);
+}
+
+.woocommerce-checkout-review-order-table tfoot th {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--nav-text-muted);
+}
+
+.woocommerce-checkout-review-order-table tfoot .order-total th,
+.woocommerce-checkout-review-order-table tfoot .order-total td {
+    padding-top: 18px;
+    border-bottom: none;
+    font-size: 15px;
+    color: var(--nav-text-primary);
+}
+
+.woocommerce-checkout-review-order-table tfoot .order-total td .amount {
+    font-family: var(--nav-font-mono);
+    font-size: 18px;
+    font-weight: 500;
+}
+
+/* Shipping method list — kill the browser's default bullets/indent. */
+.woocommerce-checkout-review-order-table #shipping_method {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    text-align: right;
+}
+
+.woocommerce-checkout-review-order-table #shipping_method li {
+    margin: 0 0 4px;
+    padding: 0;
+    list-style: none;
 }
 
 /* Place Order */
