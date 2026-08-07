@@ -13,6 +13,11 @@ docker/
 /*.sql
 /*.sql.gz
 
+# Jetpack backup archives — same PII exposure as the SQL snapshot above,
+# plus wp_users and MailPoet subscriber tables.
+/jetpack-backup-*.tar.gz
+/*.tar.gz
+
 # Build / temp
 /tmp/
 *.swp
