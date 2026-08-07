@@ -87,22 +87,38 @@ if ($search_query !== '') {
 
             if ($search_query !== '' && $query_long_enough && class_exists('WooCommerce')) :
                 // Search by batch number (LIKE meta match) OR product name / content.
-                $batch_args = [
+                // WP_Query ANDs `s` with `meta_query` (the 'relation' key only
+                // relates clauses *inside* meta_query), so a single combined
+                // query returns results only when BOTH match — i.e. never.
+                // Run the two searches separately and merge by ID.
+                $base_args = [
                     'post_type'      => 'product',
                     'posts_per_page' => 20,
                     'post_status'    => 'publish',
-                    'meta_query'     => [
-                        'relation' => 'OR',
-                        [
-                            'key'     => '_nav_batch_number',
-                            'value'   => $search_query,
-                            'compare' => 'LIKE',
-                        ],
-                    ],
-                    's' => $search_query,
+                    'fields'         => 'ids',
+                    'no_found_rows'  => true,
                 ];
 
-                $results = new WP_Query($batch_args);
+                $by_name  = new WP_Query($base_args + ['s' => $search_query]);
+                $by_batch = new WP_Query($base_args + ['meta_query' => [[
+                    'key'     => '_nav_batch_number',
+                    'value'   => $search_query,
+                    'compare' => 'LIKE',
+                ]]]);
+
+                $matched_ids = array_slice(
+                    array_unique(array_merge($by_name->posts, $by_batch->posts)),
+                    0,
+                    20
+                );
+
+                $results = new WP_Query([
+                    'post_type'      => 'product',
+                    'post_status'    => 'publish',
+                    'posts_per_page' => 20,
+                    'post__in'       => $matched_ids ?: [0],
+                    'orderby'        => 'post__in',
+                ]);
 
                 if ($results->have_posts()) :
             ?>
