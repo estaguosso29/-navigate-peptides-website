@@ -18,6 +18,12 @@
 #
 # Idempotent — safe to re-run. Pass "dry-run" to preview without writing.
 # Pass "publish-imports" to publish the imported drafts (only once prices are in).
+#
+# Auth: wordpress.com Atomic uses PASSWORD auth. This script makes three
+# connections (two uploads and the run), so it opens one multiplexed master
+# connection first — the password is typed ONCE and the other two reuse it.
+# Set WPCOM_SSH_PASSWORD (with sshpass installed) to skip the prompt entirely;
+# otherwise the password is only ever typed interactively and never stored.
 set -euo pipefail
 
 USER="${WPCOM_SSH_USER:?set WPCOM_SSH_USER}"
@@ -34,13 +40,43 @@ PDF_NAME="certificates-of-analysis.pdf"   # neutral name — no supplier in the 
 PUBLISH=""
 [[ "$MODE" == "publish-imports" ]] && { PUBLISH="publish"; MODE=""; }
 
-echo "==> Uploading PDF + scripts to $HOST"
-scp -P "$PORT" "$PDF_SRC" "$USER@$HOST:/tmp/$PDF_NAME"
-scp -P "$PORT" "$REPO_ROOT/scripts/coa-sync.php" "$USER@$HOST:/tmp/coa-sync.php"
-scp -P "$PORT" "$REPO_ROOT/scripts/coa-import-products.php" "$USER@$HOST:/tmp/coa-import-products.php"
+CTL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/coa-ssh.XXXXXX")"
+# ssh takes -p for the port, scp takes -P (scp's -p means "preserve times").
+SSH_OPTS=(-p "$PORT" -o "ControlPath=$CTL_DIR/ctl")
+SCP_OPTS=(-P "$PORT" -o "ControlPath=$CTL_DIR/ctl")
+
+cleanup() {
+  ssh "${SSH_OPTS[@]}" -O exit "$USER@$HOST" 2>/dev/null || true
+  rm -rf "$CTL_DIR"
+}
+trap cleanup EXIT
+
+# Only the master connection authenticates; the uploads and the run reuse it
+# through the control socket, so they never prompt.
+SSH_MASTER=(ssh)
+if [[ -n "${WPCOM_SSH_PASSWORD:-}" ]]; then
+  if command -v sshpass >/dev/null; then
+    export SSHPASS="$WPCOM_SSH_PASSWORD"
+    SSH_MASTER=(sshpass -e ssh)
+  else
+    echo "NOTE: WPCOM_SSH_PASSWORD is set but sshpass is not installed;"
+    echo "      you will get one interactive prompt instead. (brew install sshpass)"
+  fi
+fi
+
+echo "==> Opening connection to $HOST — password prompt, once"
+"${SSH_MASTER[@]}" "${SSH_OPTS[@]}" -o ControlMaster=yes -o ControlPersist=300 \
+  -N -f "$USER@$HOST"
+ssh "${SSH_OPTS[@]}" -O check "$USER@$HOST" >/dev/null 2>&1 \
+  || { echo "ERROR: could not open the connection — check user, host and password."; exit 1; }
+
+echo "==> Uploading PDF + scripts"
+scp "${SCP_OPTS[@]}" "$PDF_SRC" "$USER@$HOST:/tmp/$PDF_NAME"
+scp "${SCP_OPTS[@]}" "$REPO_ROOT/scripts/coa-sync.php" "$USER@$HOST:/tmp/coa-sync.php"
+scp "${SCP_OPTS[@]}" "$REPO_ROOT/scripts/coa-import-products.php" "$USER@$HOST:/tmp/coa-import-products.php"
 
 echo "==> Importing PDF + running sync ${MODE:+($MODE)}${PUBLISH:+ (publishing imports)}"
-ssh -p "$PORT" "$USER@$HOST" bash -s -- "$MODE" "$PUBLISH" <<'REMOTE'
+ssh "${SSH_OPTS[@]}" "$USER@$HOST" bash -s -- "$MODE" "$PUBLISH" <<'REMOTE'
 set -euo pipefail
 MODE="${1:-}"
 PUBLISH="${2:-}"
