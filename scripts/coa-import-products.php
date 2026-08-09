@@ -5,9 +5,10 @@
  * Run via WP-CLI:
  *   wp eval-file scripts/coa-import-products.php <coa-pdf-url> [dry-run] [publish]
  *
- * Products are created as DRAFTS: the source PDF carries no pricing, and a
- * WooCommerce product without a price is not purchasable. They publish once
- * the client's menu arrives — either by hand, or by re-running with `publish`.
+ * Products are created as DRAFTS and published by re-running with `publish` —
+ * but ONLY items that carry a 'price' (client's list, 2026-08-09). A product
+ * without a price is not purchasable, so publishing it would show a broken
+ * listing; unpriced items (currently GLP-1 S) stay draft no matter what.
  *
  * Idempotent: products are addressed by slug, existing ones are updated in
  * place rather than duplicated, and re-running changes nothing on its own.
@@ -45,6 +46,7 @@ $products = [
 
 'ss-31' => [
   'title' => 'SS-31', 'cat' => 'cellular-research', 'size' => '50mg',
+  'price' => '137.99',
   'lab' => 'BioViridian', 'lot' => '07022026-046', 'purity' => '99.73%', 'mw' => '639.8 g·mol⁻¹',
   'subtitle' => 'Mitochondria-Targeted Tetrapeptide',
   'excerpt' => 'Cardiolipin-binding tetrapeptide supplied lyophilized for in-vitro mitochondrial membrane and bioenergetics research.',
@@ -54,6 +56,7 @@ $products = [
 
 'aod-9604' => [
   'title' => 'AOD-9604', 'cat' => 'metabolic-research', 'size' => '5mg',
+  'price' => '59.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.11%',
   'subtitle' => 'Modified hGH Fragment 177-191',
   'excerpt' => 'C-terminal fragment analog of human growth hormone supplied lyophilized for in-vitro lipolytic-pathway research.',
@@ -63,6 +66,7 @@ $products = [
 
 'cjc-1295-ipamorelin' => [
   'title' => 'CJC-1295 (No DAC) & Ipamorelin', 'cat' => 'hormonal-signaling-research', 'size' => '5mg/5mg',
+  'price' => '69.99',
   'lab' => 'Optiq Health Labs', 'lot' => '0335.OPT.260729', 'purity' => '99.99%',
   'subtitle' => 'Dual Secretagogue Research Blend',
   'excerpt' => 'Combination of a modified GRF(1-29) analog and a selective pentapeptide secretagogue, supplied lyophilized for in-vitro receptor research.',
@@ -72,6 +76,7 @@ $products = [
 
 'ghrp-6' => [
   'title' => 'GHRP-6', 'cat' => 'hormonal-signaling-research', 'size' => '5mg',
+  'price' => '34.99',
   'lab' => 'BioViridian', 'lot' => '07022026-024', 'purity' => '99.82%', 'mw' => '873.3 g·mol⁻¹',
   'subtitle' => 'Hexapeptide GH Secretagogue',
   'excerpt' => 'Synthetic hexapeptide ghrelin-receptor agonist supplied lyophilized for in-vitro GHS-R1a signaling research.',
@@ -81,6 +86,7 @@ $products = [
 
 'igf-1-lr3' => [
   'title' => 'IGF-1 LR3', 'cat' => 'hormonal-signaling-research', 'size' => '1mg',
+  'price' => '89.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.87%',
   'subtitle' => 'Long R3 Insulin-Like Growth Factor-1 Analog',
   'excerpt' => 'IGF-1 analog with reduced binding-protein affinity supplied lyophilized for in-vitro IGF-receptor research.',
@@ -90,6 +96,7 @@ $products = [
 
 'ipamorelin' => [
   'title' => 'Ipamorelin', 'cat' => 'hormonal-signaling-research', 'size' => '10mg',
+  'price' => '74.99',
   'lab' => 'Freedom Diagnostics', 'lot' => 'Clear Cap/Silver Crimp', 'purity' => '99.79%',
   'subtitle' => 'Selective Pentapeptide GH Secretagogue',
   'excerpt' => 'Selective pentapeptide ghrelin-receptor agonist supplied lyophilized for in-vitro GHS-R1a signaling research.',
@@ -99,6 +106,7 @@ $products = [
 
 'sermorelin' => [
   'title' => 'Sermorelin', 'cat' => 'hormonal-signaling-research', 'size' => '10mg',
+  'price' => '49.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.14%',
   'subtitle' => 'GHRH (1-29) Amide',
   'excerpt' => '29-residue N-terminal fragment of growth-hormone-releasing hormone supplied lyophilized for in-vitro GHRH-receptor research.',
@@ -108,6 +116,7 @@ $products = [
 
 'tb-500' => [
   'title' => 'TB-500', 'cat' => 'tissue-repair-research', 'size' => '10mg',
+  'price' => '117.00',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.85%',
   'subtitle' => 'Thymosin β4 Fragment — Actin-Binding Peptide',
   'excerpt' => 'Synthetic actin-sequestering fragment of thymosin β4 supplied lyophilized for in-vitro cytoskeletal research.',
@@ -117,6 +126,7 @@ $products = [
 
 '5-amino-1mq' => [
   'title' => '5-Amino-1MQ', 'cat' => 'metabolic-research', 'size' => '10mg',
+  'price' => '49.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.73%',
   'subtitle' => 'NNMT Inhibitor — Methylquinolinium Salt',
   'excerpt' => 'Small-molecule nicotinamide N-methyltransferase inhibitor supplied lyophilized for in-vitro NAD-pathway research.',
@@ -126,6 +136,7 @@ $products = [
 
 'n-acetyl-selank' => [
   'title' => 'N-Acetyl Selank', 'cat' => 'cognitive-research', 'size' => '10mg',
+  'price' => '54.99',
   'lab' => 'BioViridian', 'lot' => '07022026-031', 'purity' => '99.84%', 'mw' => '793.9 g·mol⁻¹',
   'subtitle' => 'N-Acetylated Tuftsin Analog — Heptapeptide',
   'excerpt' => 'N-acetylated analog of the tuftsin-derived heptapeptide Selank, supplied lyophilized for in-vitro neuropeptide research.',
@@ -135,6 +146,7 @@ $products = [
 
 'n-acetyl-semax' => [
   'title' => 'N-Acetyl Semax', 'cat' => 'cognitive-research', 'size' => '10mg',
+  'price' => '54.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.65%',
   'subtitle' => 'N-Acetylated ACTH(4-7) Analog — Heptapeptide',
   'excerpt' => 'N-acetylated analog of the ACTH(4-7)-derived heptapeptide Semax, supplied lyophilized for in-vitro neuropeptide research.',
@@ -144,6 +156,7 @@ $products = [
 
 'kisspeptin' => [
   'title' => 'Kisspeptin', 'cat' => 'hormonal-signaling-research', 'size' => '10mg',
+  'price' => '49.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.55%',
   'subtitle' => 'KISS1-Derived Decapeptide — GPR54 Ligand',
   'excerpt' => 'Decapeptide product of the KISS1 gene supplied lyophilized for in-vitro GPR54 receptor research.',
@@ -153,6 +166,7 @@ $products = [
 
 'pt-141' => [
   'title' => 'PT-141', 'cat' => 'dermal-research', 'size' => '10mg',
+  'price' => '44.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.74%',
   'subtitle' => 'Synthetic Melanocortin Analog',
   'excerpt' => 'Cyclic heptapeptide melanocortin-receptor agonist supplied lyophilized for in-vitro MC receptor research.',
@@ -162,6 +176,7 @@ $products = [
 
 'glow' => [
   'title' => 'GLOW', 'cat' => 'tissue-repair-research', 'size' => '70mg',
+  'price' => '143.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.92%',
   'subtitle' => 'GHK-Cu / TB-500 / BPC-157 Research Blend',
   'excerpt' => 'Three-component research blend of a copper tripeptide and two synthetic fragments, supplied lyophilized for in-vitro tissue-model research.',
@@ -171,6 +186,7 @@ $products = [
 
 'klow' => [
   'title' => 'KLOW', 'cat' => 'tissue-repair-research', 'size' => '80mg',
+  'price' => '129.00',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.96%',
   'subtitle' => 'GHK-Cu / KPV / TB-500 / BPC-157 Research Blend',
   'excerpt' => 'Four-component research blend supplied lyophilized for in-vitro extracellular-matrix and signalling research.',
@@ -180,6 +196,7 @@ $products = [
 
 'melanotan-1' => [
   'title' => 'Melanotan 1', 'cat' => 'dermal-research', 'size' => '10mg',
+  'price' => '49.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.31%',
   'subtitle' => 'Linear α-MSH Analog',
   'excerpt' => 'Linear α-melanocyte-stimulating hormone analog supplied lyophilized for in-vitro melanocortin-1 receptor research.',
@@ -189,6 +206,7 @@ $products = [
 
 'melanotan-2' => [
   'title' => 'Melanotan 2', 'cat' => 'dermal-research', 'size' => '10mg',
+  'price' => '39.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '261807', 'purity' => '99.83%',
   'subtitle' => 'Cyclic α-MSH Analog',
   'excerpt' => 'Cyclic lactam analog of α-melanocyte-stimulating hormone supplied lyophilized for in-vitro melanocortin-receptor research.',
@@ -198,6 +216,7 @@ $products = [
 
 'dsip' => [
   'title' => 'DSIP', 'cat' => 'cognitive-research', 'size' => '15mg',
+  'price' => '39.99',
   'lab' => 'Freedom Diagnostics', 'lot' => '10B', 'purity' => '99.56%',
   'subtitle' => 'Nonapeptide — Delta-Wave Correlate',
   'excerpt' => 'Nonapeptide first isolated from mammalian cerebral venous blood, supplied lyophilized for in-vitro neuropeptide research.',
@@ -206,7 +225,11 @@ $products = [
 ],
 
 'glp-1-s' => [
-  'title' => 'GLP-1 S', 'cat' => 'metabolic-research', 'size' => '10mg',
+  // Sizes/prices are peptideclub.com's own listing (client: store is
+  // authoritative). The certificate is for a 10mg vial — same accepted
+  // size-vs-cert situation as Epithalon (50mg cert on a 10mg product).
+  'title' => 'GLP-1 S', 'cat' => 'metabolic-research', 'size' => '2mg / 5mg / 15mg',
+  'variations' => ['2mg' => '22.99', '5mg' => '32.99', '15mg' => '65.00'],
   'lab' => 'Freedom Diagnostics', 'lot' => '10B', 'purity' => '99.93%',
   'subtitle' => 'GLP-1 Receptor Agonist — Single Regulator',
   'excerpt' => 'Long-acting GLP-1 receptor agonist research peptide supplied lyophilized for in-vitro incretin-pathway research.',
@@ -227,7 +250,13 @@ foreach ($products as $slug => $p) {
     ]);
     $existing = $existing[0] ?? null;
 
-    $status = $publish ? 'publish' : ($existing ? $existing->post_status : 'draft');
+    // Publishing is gated on price — an unpriced product must never go live.
+    $has_price   = !empty($p['price']) || !empty($p['variations']);
+    $can_publish = $publish && $has_price;
+    if ($publish && !$has_price) {
+        $log("skip-publish  {$slug}: no price — staying draft");
+    }
+    $status = $can_publish ? 'publish' : ($existing ? $existing->post_status : 'draft');
     $postarr = [
         'post_title'   => $p['title'],
         'post_name'    => $slug,
@@ -250,7 +279,7 @@ foreach ($products as $slug => $p) {
     $id = wp_insert_post($postarr, true);
     if (is_wp_error($id)) { $problems[] = "{$slug}: " . $id->get_error_message(); continue; }
 
-    wp_set_object_terms($id, 'simple', 'product_type');
+    wp_set_object_terms($id, empty($p['variations']) ? 'simple' : 'variable', 'product_type');
     $term = get_term_by('slug', $p['cat'], 'product_cat');
     if ($term) {
         wp_set_object_terms($id, [(int) $term->term_id], 'product_cat');
@@ -272,10 +301,66 @@ foreach ($products as $slug => $p) {
     if (!empty($p['mw'])) $meta['_nav_molecular_weight'] = $p['mw'];
     foreach ($meta as $k => $v) update_post_meta($id, $k, $v);
 
-    // Keep out of the catalogue until priced — a product with no price is
-    // not purchasable and reads as broken in the grid.
     update_post_meta($id, '_visibility', 'visible');
-    update_post_meta($id, '_stock_status', 'instock');
+
+    // Variable products: custom "Amount" attribute + one variation per size,
+    // same shape as the existing GLP pair. Idempotent — variations are found
+    // by their attribute_amount value and updated in place.
+    if (!empty($p['variations'])) {
+        update_post_meta($id, '_product_attributes', ['amount' => [
+            'name' => 'Amount', 'value' => implode(' | ', array_keys($p['variations'])),
+            'position' => 0, 'is_visible' => 1, 'is_variation' => 1, 'is_taxonomy' => 0,
+        ]]);
+        $children = get_posts(['post_type' => 'product_variation', 'post_parent' => $id,
+                               'post_status' => ['publish', 'private'], 'numberposts' => -1]);
+        $by_amount = [];
+        foreach ($children as $c) {
+            $by_amount[(string) get_post_meta($c->ID, 'attribute_amount', true)] = $c->ID;
+        }
+        foreach ($p['variations'] as $amount => $price) {
+            $vid = $by_amount[$amount] ?? wp_insert_post([
+                'post_type' => 'product_variation', 'post_parent' => $id,
+                'post_status' => 'publish', 'post_title' => "{$p['title']} - {$amount}",
+            ]);
+            update_post_meta($vid, 'attribute_amount', $amount);
+            nav_coa_set_price($vid, $price);
+        }
+        if (class_exists('WC_Product_Variable')) WC_Product_Variable::sync($id);
+    }
+
+    nav_coa_set_price($id, empty($p['variations']) ? ($p['price'] ?? '') : null);
+}
+
+/**
+ * Set price + stock via WC CRUD, then make sure wc_product_meta_lookup
+ * agrees. save() refreshes the lookup row only when the postmeta write
+ * actually changed the stored value — if an earlier code path already put
+ * this price in postmeta while the lookup row lagged, save() no-ops and the
+ * row stays stale (price sorting/filters read it). In that one case the two
+ * derived columns are repaired directly; verification asserts the end state.
+ * $price null = leave prices alone (variable parents derive from children).
+ */
+function nav_coa_set_price(int $id, ?string $price): void {
+    if (!function_exists('wc_get_product') || !($prod = wc_get_product($id))) return;
+    if ($price !== null && $price !== '') {
+        $prod->set_regular_price($price);
+        $prod->set_price($price);
+    }
+    $prod->set_stock_status('instock');
+    $prod->save();
+    if ($price === null || $price === '') return;
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'wc_product_meta_lookup';
+    $row = $wpdb->get_row($wpdb->prepare(
+        "SELECT min_price, max_price FROM {$table} WHERE product_id = %d", $id));
+    if (!$row || (float) $row->min_price !== (float) $price
+              || (float) $row->max_price !== (float) $price) {
+        $wpdb->query($wpdb->prepare(
+            "INSERT INTO {$table} (product_id, min_price, max_price) VALUES (%d, %f, %f)
+             ON DUPLICATE KEY UPDATE min_price = VALUES(min_price), max_price = VALUES(max_price)",
+            $id, $price, $price));
+    }
 }
 
 if ($problems) {
@@ -304,6 +389,48 @@ if (!$dry) {
         if ($slug === 'glp-1-s' && stripos($found[0]->post_content . $found[0]->post_excerpt
             . $found[0]->post_title, 'semaglutide') !== false) {
             $missing[] = "glp-1-s: real compound name present in visible text";
+        }
+        // Price/publish invariants: a published import must be priced, and an
+        // unpriced item must never be published. Prices are asserted in BOTH
+        // stores — postmeta AND wc_product_meta_lookup. The shop's sorting and
+        // filtering read the lookup table, and it once went stale while
+        // postmeta (and this verification) looked correct.
+        global $wpdb;
+        $lookup = $wpdb->get_row($wpdb->prepare(
+            "SELECT min_price, max_price FROM {$wpdb->prefix}wc_product_meta_lookup WHERE product_id = %d", $id));
+        if (!empty($p['price'])
+            && (!$lookup || (float) $lookup->min_price !== (float) $p['price'])) {
+            $missing[] = "{$slug}: lookup min_price is '"
+                . ($lookup->min_price ?? 'MISSING') . "', expected '{$p['price']}'";
+        }
+        if (!empty($p['variations']) && $lookup) {
+            $want_min = min(array_map('floatval', $p['variations']));
+            $want_max = max(array_map('floatval', $p['variations']));
+            if ((float) $lookup->min_price !== $want_min || (float) $lookup->max_price !== $want_max) {
+                $missing[] = "{$slug}: lookup range {$lookup->min_price}-{$lookup->max_price}, "
+                    . "expected {$want_min}-{$want_max}";
+            }
+        }
+        $stored_price = get_post_meta($id, '_price', true);
+        if (!empty($p['price']) && $stored_price !== $p['price']) {
+            $missing[] = "{$slug}: price is '{$stored_price}', expected '{$p['price']}'";
+        }
+        if ($found[0]->post_status === 'publish' && $stored_price === '' && empty($p['variations'])) {
+            $missing[] = "{$slug}: PUBLISHED WITHOUT A PRICE";
+        }
+        if (!empty($p['variations'])) {
+            $have = [];
+            foreach (get_posts(['post_type' => 'product_variation', 'post_parent' => $id,
+                                'post_status' => ['publish', 'private'], 'numberposts' => -1]) as $c) {
+                $have[(string) get_post_meta($c->ID, 'attribute_amount', true)]
+                    = (string) get_post_meta($c->ID, '_price', true);
+            }
+            foreach ($p['variations'] as $amount => $price) {
+                if (($have[$amount] ?? null) !== $price) {
+                    $missing[] = "{$slug} {$amount}: variation price is '"
+                        . ($have[$amount] ?? 'MISSING') . "', expected '{$price}'";
+                }
+            }
         }
     }
     if ($missing) WP_CLI::error("Verification failed:\n  - " . implode("\n  - ", $missing));

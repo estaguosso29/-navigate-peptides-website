@@ -143,6 +143,86 @@ foreach ($coded as $slug => $names) {
     wp_update_post($update);
 }
 
+/* -----------------------------------------------------------------
+ * Variation size fixes (client 2026-08-09: follow the supplier store).
+ *
+ * NAD+ sold "5000mg/10000mg" — matching nothing: certificates are 500/1000mg,
+ * the supplier sells 200/500mg, and the unused 500mg/1000mg pa_size terms show
+ * the intended values were mistyped ×10. Worse, the parent declared taxonomy
+ * attribute pa_size while its variations carry attribute_amount meta, so a
+ * customer's size selection never actually matched a variation. Converted to
+ * the custom "Amount" attribute every other variable product here uses.
+ *
+ * Tesamorelin sold "5mg" — no 5mg exists in the certificates (10/20mg) or the
+ * supplier store (2/10mg); renamed to the certified 10mg.
+ * ----------------------------------------------------------------*/
+// Client decision (reaffirmed 2026-08-09): peptideclub.com is authoritative
+// for sizes. NAD+ therefore becomes 200/500mg (store-literal); the 200mg has
+// no certificate yet and shows "pending" until her next stock arrives. The
+// 200mg price is the store's own, per her "follow what they do" for gaps.
+// Maps cover both origin states: fresh prod (5000/10000) and a DB where the
+// earlier 500/1000 fix already ran.
+$size_fixes = [
+    'nad'         => [
+        'map'    => ['5000mg' => '500mg', '10000mg' => '200mg', '1000mg' => '200mg'],
+        'prices' => ['200mg' => '33.99'],
+    ],
+    'tesamorelin' => ['map' => ['5mg' => '10mg'], 'prices' => []],
+];
+
+foreach ($size_fixes as $slug => $fix) {
+    $p = $find($slug);
+    if (!$p) { $missing[] = $slug; continue; }
+    $changes = [];
+    $map = $fix['map'];
+
+    $variations = get_posts([
+        'post_type' => 'product_variation', 'post_parent' => $p->ID,
+        'post_status' => ['publish', 'private'], 'numberposts' => -1, 'orderby' => 'ID', 'order' => 'ASC',
+    ]);
+    $amounts = [];
+    foreach ($variations as $v) {
+        $cur = (string) get_post_meta($v->ID, 'attribute_amount', true);
+        $new = $map[$cur] ?? $cur;
+        $amounts[] = $new;
+        $want_price = $fix['prices'][$new] ?? null;
+        $price_ok = $want_price === null
+            || get_post_meta($v->ID, '_price', true) === $want_price;
+        if ($new === $cur && $v->post_title === "{$p->post_title} - {$new}" && $price_ok) continue;
+        $changes[] = "variation #{$v->ID}: {$cur} → {$new}" . ($price_ok ? '' : " @ {$want_price}");
+        if ($dry) continue;
+        update_post_meta($v->ID, 'attribute_amount', $new);
+        wp_update_post(['ID' => $v->ID, 'post_title' => "{$p->post_title} - {$new}"]);
+        if (!$price_ok) {
+            update_post_meta($v->ID, '_regular_price', $want_price);
+            update_post_meta($v->ID, '_price', $want_price);
+        }
+    }
+    sort($amounts, SORT_NATURAL);
+
+    // Parent attribute: single custom (non-taxonomy) "Amount", same shape as
+    // the working variable products (e.g. the GLP pair).
+    $want_attrs = ['amount' => [
+        'name' => 'Amount', 'value' => implode(' | ', $amounts),
+        'position' => 0, 'is_visible' => 1, 'is_variation' => 1, 'is_taxonomy' => 0,
+    ]];
+    if (get_post_meta($p->ID, '_product_attributes', true) !== $want_attrs) {
+        $changes[] = 'parent attribute → Amount: ' . implode(' | ', $amounts);
+        if (!$dry) update_post_meta($p->ID, '_product_attributes', $want_attrs);
+    }
+    if (get_the_terms($p->ID, 'pa_size')) {
+        $changes[] = 'detach pa_size terms';
+        if (!$dry) wp_set_object_terms($p->ID, [], 'pa_size');
+    }
+
+    if (!$changes) { $log("size  {$slug}: already correct"); continue; }
+    $log("size  {$slug} (#{$p->ID}): " . implode(', ', $changes));
+    if (!$dry) {
+        if (class_exists('WC_Product_Variable')) WC_Product_Variable::sync($p->ID);
+        if (function_exists('wc_delete_product_transients')) wc_delete_product_transients($p->ID);
+    }
+}
+
 if ($missing) {
     WP_CLI::error('Product slug(s) not found: ' . implode(', ', $missing));
 }
@@ -168,12 +248,40 @@ if (!$dry) {
             }
         }
     }
+    foreach ($size_fixes as $slug => $fix) {
+        $p = $find($slug);
+        $vals = [];
+        foreach (get_posts(['post_type' => 'product_variation', 'post_parent' => $p->ID,
+                            'post_status' => ['publish', 'private'], 'numberposts' => -1]) as $v) {
+            $amt = (string) get_post_meta($v->ID, 'attribute_amount', true);
+            $vals[] = $amt;
+            $want_price = $fix['prices'][$amt] ?? null;
+            if ($want_price !== null && get_post_meta($v->ID, '_price', true) !== $want_price) {
+                $problems[] = "{$slug} {$amt}: price is not {$want_price}";
+            }
+        }
+        // Only sizes that are pure sources (never a target) must be gone —
+        // e.g. 500mg is both a target of 5000mg and a valid final size.
+        $gone = array_diff(array_keys($fix['map']), array_values($fix['map']));
+        foreach ($gone as $old) {
+            if (in_array($old, $vals, true)) $problems[] = "{$slug}: variation still {$old}";
+        }
+        $attrs = get_post_meta($p->ID, '_product_attributes', true);
+        if (!isset($attrs['amount']) || ($attrs['amount']['is_taxonomy'] ?? 1)) {
+            $problems[] = "{$slug}: parent attribute is not the custom Amount";
+        }
+        // Every dropdown value must match exactly one variation, else the
+        // selector falls back to first-match and the wrong price ships.
+        if (count($vals) !== count(array_unique($vals))) {
+            $problems[] = "{$slug}: duplicate variation amounts: " . implode(',', $vals);
+        }
+    }
     if ($problems) {
         WP_CLI::error("Verification failed:\n  - " . implode("\n  - ", $problems));
     }
     WP_CLI::success(sprintf(
-        'Synced and verified: %d wired, %d hidden, %d GLP names coded.',
-        count($wire), count($hide), count($coded)
+        'Synced and verified: %d wired, %d hidden, %d GLP names coded, %d size-fixed.',
+        count($wire), count($hide), count($coded), count($size_fixes)
     ));
 } else {
     WP_CLI::success('Dry run complete — no changes written.');
