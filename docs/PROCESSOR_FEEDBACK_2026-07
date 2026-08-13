@@ -8,7 +8,62 @@ July 2026 feedback on top of it.
 
 > Note: the screenshot we received was cropped — item 1 of the
 > processor's list and the reference example for item 4 were cut off.
-> Item 1 is still outstanding with the client.
+> Item 1 was supplied separately in August 2026 and is recorded below.
+
+---
+
+## Item 1 — Terms and Conditions of Purchase (August 2026)
+
+The client sent a *Terms and Conditions of Purchase* template plus a
+checkout screenshot showing the "I accept the Terms and Conditions"
+checkbox above the Place Order button. The client believes it came from
+the payment processor.
+
+⚠️ The client described this as coming from "our new processor".
+Items 2–4 below came from **AllayPay** underwriting. If underwriting has
+moved to a different provider, confirm who, and re-check that items 2–4
+still reflect that provider's asks — they are defensible on their own
+merits, but the attribution in this doc would be wrong.
+
+**What the template was:** a fill-in-the-blank skeleton, not a finished
+contract. It shipped with `[Merchant Name]`, `MerchantWebsite.com`,
+`[insert]` for the governing-law state, and two slots reading
+"*to be inserted based on merchant's industry vertical / terms*".
+
+**Implementation:** merged into the existing Terms of Service (page 29,
+`/terms` — the page `woocommerce_terms_page_id` points at, and therefore
+the page behind the checkout checkbox). Content is version-controlled at
+`docs/legal/terms-of-service.html` and pushed with
+`scripts/terms-update-wpcom.sh`. Every template section is accounted for;
+`docs/legal/terms-coverage-map.md` is the clause-by-clause map, including
+the four clauses that were reworded and why.
+
+The two "to be inserted" slots were filled as the client directed:
+
+- **§3 Product and sale limitations** — the client's supplied text,
+  verbatim.
+- **§8 Returns and refunds** — reproduces the live `/refund-policy`
+  page (ID 13) in full.
+
+⚠️ The client's §3 text intentionally contains "diagnosis, treatment,
+prevention, cure" — terms banned everywhere else on the site (see
+`docs/COMPLIANCE` → Prohibited Language). As with the FDA disclaimer in
+item 2, they are permitted ONLY inside this canonical, client-supplied
+clause. Do not edit, paraphrase, or scrub it.
+
+Note this text is a *different* RUO formulation from
+`nav_get_disclaimer('sitewide')`. The sitewide line and its JSON-LD
+`disambiguatingDescription` counterpart are unchanged — the processor
+scanner cross-check still passes. §3 is an additional purchase-terms
+clause, not a replacement, and is deliberately not routed through
+`nav_get_disclaimer()`: it lives in page content, and a shortcode
+indirection to protect one paragraph was judged not worth the machinery.
+
+**ACH:** the template's two ACH/e-Check debit authorizations were
+included (§6), payable to "Navigate Peptides". No ACH gateway is
+installed on production yet — the clauses are conditional on placing an
+ACH/e-Check order, so they are dormant rather than inaccurate. Revisit
+the payable-to line and the footer payment marks when ACH goes live.
 
 ---
 
