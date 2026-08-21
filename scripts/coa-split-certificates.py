@@ -197,7 +197,10 @@ for slug, (page_no, stem) in MAPPING.items():
     # Rewrite /ID to a value derived from the file itself (identifier only —
     # it has no bearing on the rendered certificate).
     raw = open(out_path, "rb").read()
-    m = re.search(rb"/ID\s*\[<([0-9A-Fa-f]*)>\s*<([0-9A-Fa-f]*)>\]", raw)
+    # A /ID element may be a hex string <..> or a literal string (..);
+    # matching only the hex form left some files un-pinned and random.
+    _idpart = rb"(?:<[0-9A-Fa-f]*>|\((?:\\.|[^)\\])*\))"
+    m = re.search(rb"/ID\s*\[\s*" + _idpart + rb"\s*" + _idpart + rb"\s*\]", raw)
     if m:
         body = raw[:m.start()] + raw[m.end():]
         tag = hashlib.md5(body).hexdigest().upper().encode()
