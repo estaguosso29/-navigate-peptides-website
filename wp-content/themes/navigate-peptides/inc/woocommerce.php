@@ -185,7 +185,7 @@ function nav_batch_verification_tab(): void {
     // COA Download Button
     if ($coa_url) {
         echo '<a href="' . esc_url($coa_url) . '" class="nav-tab-coa-btn" target="_blank" rel="noopener">';
-        echo esc_html__('View Certificate of Analysis', 'navigate-peptides');
+        echo esc_html__('View COA', 'navigate-peptides');
         echo ' <span>→</span>';
         echo '</a>';
     }

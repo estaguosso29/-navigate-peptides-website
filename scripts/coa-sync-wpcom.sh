@@ -8,8 +8,10 @@
 # "SFTP/SSH credentials" (same account the deploy workflow uses).
 #
 # What it does, over SSH:
-#   1. Uploads the compiled COA PDF (neutral filename) and both PHP scripts
-#   2. Imports the PDF into the Media Library (skipped if already imported)
+#   1. Splits the compiled PDF into one verified certificate per product,
+#      then uploads those plus both PHP scripts
+#   2. Imports each certificate into the Media Library (reused on re-runs) and
+#      builds slug -> URL map; retires the old compiled catalogue PDF
 #   3. coa-sync.php      — wires certificates onto existing products, hides the
 #                          uncertified ones, applies coded GLP names
 #   4. coa-import-products.php — creates the 19 certified catalogue items that
@@ -33,9 +35,16 @@ MODE="${1:-}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PDF_SRC="$REPO_ROOT/docs/Azoth_Catalog_COAs_Compiled.pdf"
-PDF_NAME="certificates-of-analysis.pdf"   # neutral name — no supplier in the public URL
+SPLIT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/coa-certs.XXXXXX")"
 
 [[ -f "$PDF_SRC" ]] || { echo "ERROR: $PDF_SRC not found"; exit 1; }
+
+# Split FIRST and locally: the splitter re-opens every file it writes and
+# proves it holds the right certificate (sample name + lot + purity, or the
+# page-image md5 for the scanned ones). Nothing is uploaded unless it passes.
+echo "==> Splitting certificates (verified)"
+python3 "$REPO_ROOT/scripts/coa-split-certificates.py" "$PDF_SRC" "$SPLIT_DIR" \
+  || { echo "ERROR: certificate split failed verification — nothing uploaded."; exit 1; }
 
 PUBLISH=""
 [[ "$MODE" == "publish-imports" ]] && { PUBLISH="publish"; MODE=""; }
@@ -47,7 +56,7 @@ SCP_OPTS=(-P "$PORT" -o "ControlPath=$CTL_DIR/ctl")
 
 cleanup() {
   ssh "${SSH_OPTS[@]}" -O exit "$USER@$HOST" 2>/dev/null || true
-  rm -rf "$CTL_DIR"
+  rm -rf "$CTL_DIR" "${SPLIT_DIR:-}"
 }
 trap cleanup EXIT
 
@@ -70,48 +79,40 @@ echo "==> Opening connection to $HOST — password prompt, once"
 ssh "${SSH_OPTS[@]}" -O check "$USER@$HOST" >/dev/null 2>&1 \
   || { echo "ERROR: could not open the connection — check user, host and password."; exit 1; }
 
-echo "==> Uploading PDF + scripts"
-scp "${SCP_OPTS[@]}" "$PDF_SRC" "$USER@$HOST:/tmp/$PDF_NAME"
-scp "${SCP_OPTS[@]}" "$REPO_ROOT/scripts/coa-sync.php" "$USER@$HOST:/tmp/coa-sync.php"
-scp "${SCP_OPTS[@]}" "$REPO_ROOT/scripts/coa-import-products.php" "$USER@$HOST:/tmp/coa-import-products.php"
+echo "==> Uploading certificates + scripts"
+ssh "${SSH_OPTS[@]}" "$USER@$HOST" 'rm -rf /tmp/coa-certs && mkdir -p /tmp/coa-certs'
+scp "${SCP_OPTS[@]}" -q "$SPLIT_DIR"/*.pdf "$SPLIT_DIR/manifest.json" "$USER@$HOST:/tmp/coa-certs/"
+scp "${SCP_OPTS[@]}" -q "$REPO_ROOT/scripts/coa-media-import.php" "$USER@$HOST:/tmp/coa-media-import.php"
+scp "${SCP_OPTS[@]}" -q "$REPO_ROOT/scripts/coa-sync.php" "$USER@$HOST:/tmp/coa-sync.php"
+scp "${SCP_OPTS[@]}" -q "$REPO_ROOT/scripts/coa-import-products.php" "$USER@$HOST:/tmp/coa-import-products.php"
 
-echo "==> Importing PDF + running sync ${MODE:+($MODE)}${PUBLISH:+ (publishing imports)}"
+echo "==> Running sync ${MODE:+($MODE)}${PUBLISH:+ (publishing imports)}"
 ssh "${SSH_OPTS[@]}" "$USER@$HOST" bash -s -- "$MODE" "$PUBLISH" <<'REMOTE'
 set -euo pipefail
 MODE="${1:-}"
 PUBLISH="${2:-}"
 cd ~/htdocs 2>/dev/null || cd /srv/htdocs
 
-# Reuse the existing attachment on re-runs instead of importing a duplicate.
-EXISTING_ID=$(wp post list --post_type=attachment --field=ID \
-  --meta_key=_wp_attached_file --format=ids 2>/dev/null | tr ' ' '\n' | while read -r id; do
-    [[ -n "$id" ]] || continue
-    f=$(wp post meta get "$id" _wp_attached_file 2>/dev/null || true)
-    [[ "$f" == *certificates-of-analysis*.pdf ]] && { echo "$id"; break; }
-  done)
-
-if [[ -n "${EXISTING_ID:-}" ]]; then
-  echo "PDF already in Media Library (attachment #$EXISTING_ID) — reusing."
-  ATT_ID="$EXISTING_ID"
-else
-  ATT_ID=$(wp media import "/tmp/certificates-of-analysis.pdf" \
-    --title="Certificates of Analysis" --porcelain)
-  echo "Imported PDF as attachment #$ATT_ID"
-fi
-
-COA_URL=$(wp eval "echo wp_get_attachment_url($ATT_ID);")
-echo "COA URL: $COA_URL"
+echo "--- importing certificates into the Media Library ---"
+wp eval-file /tmp/coa-media-import.php /tmp/coa-certs /tmp/coa-map.json $MODE
 
 echo "--- wiring certificates onto existing products ---"
-wp eval-file /tmp/coa-sync.php "$COA_URL" $MODE
+wp eval-file /tmp/coa-sync.php /tmp/coa-map.json $MODE
 
 echo "--- importing new certified catalogue items ---"
-wp eval-file /tmp/coa-import-products.php "$COA_URL" $MODE $PUBLISH
+wp eval-file /tmp/coa-import-products.php /tmp/coa-map.json $MODE $PUBLISH
+
+# Retire LAST: the guard refuses to delete an attachment any product still
+# points at, so this has to run after the wiring above has moved every product
+# onto its own certificate — otherwise it always self-vetoes and the compiled
+# catalogue (and its index page) stays reachable.
+echo "--- retiring the compiled catalogue PDF ---"
+wp eval-file /tmp/coa-media-import.php /tmp/coa-certs /tmp/coa-map.json $MODE retire-compiled
 
 if [[ "$MODE" != "dry-run" ]]; then
   wp cache flush || true
 fi
-rm -f /tmp/coa-sync.php /tmp/coa-import-products.php /tmp/certificates-of-analysis.pdf
+rm -rf /tmp/coa-sync.php /tmp/coa-import-products.php /tmp/coa-media-import.php /tmp/coa-certs /tmp/coa-map.json
 REMOTE
 
 if [[ "$MODE" != "dry-run" ]]; then
@@ -120,7 +121,7 @@ if [[ "$MODE" != "dry-run" ]]; then
     code=$(curl -s -o /dev/null -w "%{http_code}" "https://navigatepeptides.com$path")
     echo "    $code  $path"
   done
-  echo "Done. Manually verify: COA search shows 7 results for 261807,"
-  echo "product pages show 'Download COA', GLP pages show coded names."
+  echo "Done. Manually verify: each product page's COA link opens ONLY that"
+  echo "product's certificate, and GLP pages show coded names."
   echo "Also bust the edge cache: wp.com dashboard → Settings → Clear cache."
 fi
