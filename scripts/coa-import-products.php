@@ -3,7 +3,10 @@
  * Create the certified Azoth catalogue items that are not yet on the site.
  *
  * Run via WP-CLI:
- *   wp eval-file scripts/coa-import-products.php <coa-pdf-url> [dry-run] [publish]
+ *   wp eval-file scripts/coa-import-products.php <coa-map.json> [dry-run] [publish]
+ *
+ * <coa-map.json> maps product slug -> that product's OWN certificate URL, so
+ * each page links only its own certificate (client 2026-08-10).
  *
  * Products are created as DRAFTS and published by re-running with `publish` —
  * but ONLY items that carry a 'price' (client's list, 2026-08-09). A product
@@ -24,10 +27,13 @@ if (!isset($args) || !is_array($args)) {
     fwrite(STDERR, "Run via WP-CLI: wp eval-file scripts/coa-import-products.php <url> [dry-run]\n");
     exit(1);
 }
-if (empty($args[0]) || !preg_match('#^https?://#', $args[0])) {
-    WP_CLI::error('First argument must be the COA PDF URL.');
+if (empty($args[0]) || !is_readable($args[0])) {
+    WP_CLI::error('First argument must be a readable coa-map.json (slug => certificate URL).');
 }
-$coa_url = $args[0];
+$coa_map = json_decode((string) file_get_contents($args[0]), true);
+if (!is_array($coa_map) || !$coa_map) {
+    WP_CLI::error('coa-map.json did not decode to a non-empty array.');
+}
 $opts    = array_map(fn($a) => ltrim((string) $a, '-'), array_slice($args, 1));
 $dry     = in_array('dry-run', $opts, true);
 $publish = in_array('publish', $opts, true);
@@ -293,7 +299,7 @@ foreach ($products as $slug => $p) {
         '_nav_purity'             => $p['purity'],
         '_nav_testing_lab'        => $p['lab'],
         '_nav_batch_number'       => $p['lot'],
-        '_nav_coa_pdf'            => esc_url_raw($coa_url),
+        '_nav_coa_pdf'            => esc_url_raw($coa_map[$slug] ?? ''),
         '_nav_form'               => $FORM,
         '_nav_storage'            => $STORAGE,
         '_nav_research_focus'     => implode("\n", $p['focus']),
@@ -376,8 +382,10 @@ if (!$dry) {
         ]);
         if (!$found) { $missing[] = "{$slug}: not found after import"; continue; }
         $id = $found[0]->ID;
-        if (get_post_meta($id, '_nav_coa_pdf', true) !== esc_url_raw($coa_url)) {
-            $missing[] = "{$slug}: _nav_coa_pdf not set";
+        $want_url = esc_url_raw($coa_map[$slug] ?? '');
+        $got_url  = get_post_meta($id, '_nav_coa_pdf', true);
+        if ($want_url === '' || $got_url !== $want_url) {
+            $missing[] = "{$slug}: _nav_coa_pdf is '{$got_url}', expected '{$want_url}'";
         }
         if (get_post_meta($id, '_nav_purity', true) !== $p['purity']) {
             $missing[] = "{$slug}: purity mismatch";

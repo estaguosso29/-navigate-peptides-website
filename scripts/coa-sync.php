@@ -2,7 +2,13 @@
 /**
  * COA catalog sync — August 2026 Azoth certificate wiring.
  *
- * Run via WP-CLI:  wp eval-file scripts/coa-sync.php <coa-pdf-url> [dry-run] [rename-slugs]
+ * Run via WP-CLI:  wp eval-file scripts/coa-sync.php <coa-map.json> [dry-run] [rename-slugs]
+ *
+ * <coa-map.json> maps product slug -> that product's OWN certificate URL.
+ * Each product links only its own certificate (client 2026-08-10); the
+ * compiled catalogue PDF is no longer used, so its index page — which listed
+ * every supplier product incl. the real GLP names and 12 'No current COA'
+ * rows — is no longer reachable from the site.
  *
  * (Options are bare words, not --flags: WP-CLI consumes unknown --flags
  * itself and they never reach eval-file scripts.)
@@ -10,7 +16,7 @@
  * Idempotent: products are addressed by slug, every write is a plain
  * update, and re-running against an already-synced site is a no-op.
  *
- *   <coa-pdf-url>   URL of the compiled COA PDF in the media library.
+ *   <coa-map.json>  slug => per-product certificate URL.
  *   --dry-run       Print planned changes without writing.
  *   --rename-slugs  ALSO rename GLP slugs (tirzepatide → glp-1-t,
  *                   retatrutide → glp-3-r). OFF by default — the client's
@@ -23,17 +29,20 @@ if (!isset($args) || !is_array($args)) {
     fwrite(STDERR, "Run via WP-CLI: wp eval-file scripts/coa-sync.php <url> [dry-run]\n");
     exit(1);
 }
-if (empty($args[0]) || !preg_match('#^https?://#', $args[0])) {
-    WP_CLI::error('First argument must be the COA PDF URL.');
+if (empty($args[0]) || !is_readable($args[0])) {
+    WP_CLI::error('First argument must be a readable coa-map.json (slug => certificate URL).');
 }
-$coa_url = $args[0];
+$coa_map = json_decode((string) file_get_contents($args[0]), true);
+if (!is_array($coa_map) || !$coa_map) {
+    WP_CLI::error('coa-map.json did not decode to a non-empty array.');
+}
 $opts    = array_map(fn($a) => ltrim((string) $a, '-'), array_slice($args, 1));
 $dry          = in_array('dry-run', $opts, true);
 $rename_slugs = in_array('rename-slugs', $opts, true);
 
 // slug => [testing lab, batch/lot, purity]
 $wire = [
-    'bpc-157'        => ['Freedom Diagnostics', '261807',          '99.31%'],
+    'bpc-157'        => ['BioViridian',         '07022026-004',    '99.74%'],
     'bpc-157-tb-500' => ['Freedom Diagnostics', '261807',          '99.76%'],
     'epithalon'      => ['Freedom Diagnostics', '261807',          '99.61%'],
     'ghk-cu'         => ['BioViridian',         '07022026-022',    '99.84%'],
@@ -42,7 +51,7 @@ $wire = [
     'nad'            => ['Freedom Diagnostics', '261807',          '99.94%'],
     'tesamorelin'    => ['Freedom Diagnostics', '261807',          '99.78%'],
     'tirzepatide'    => ['Optiq Health Labs',   '0330.OPT.260729', '99.99%'],
-    'retatrutide'    => ['Optiq Health Labs',   '0336.OPT.260729', '99.99%'],
+    'retatrutide'    => ['BioViridian',         '07022026-001',    '99.71%'],
 ];
 
 // Products with no matching certificate — hidden until one exists.
@@ -94,9 +103,12 @@ $missing = [];
 foreach ($wire as $slug => [$lab, $lot, $purity]) {
     $p = $find($slug);
     if (!$p) { $missing[] = $slug; continue; }
-    $log("wire  {$slug} (#{$p->ID}): coa_pdf, lab={$lab}, lot={$lot}, purity={$purity}");
+    $url = $coa_map[$slug] ?? null;
+    if (!$url) { $missing[] = "{$slug}: no certificate URL in coa-map.json"; continue; }
+    $log("wire  {$slug} (#{$p->ID}): " . basename(parse_url($url, PHP_URL_PATH))
+         . ", lab={$lab}, lot={$lot}, purity={$purity}");
     if ($dry) continue;
-    update_post_meta($p->ID, '_nav_coa_pdf', esc_url_raw($coa_url));
+    update_post_meta($p->ID, '_nav_coa_pdf', esc_url_raw($url));
     update_post_meta($p->ID, '_nav_testing_lab', $lab);
     update_post_meta($p->ID, '_nav_batch_number', $lot);
     update_post_meta($p->ID, '_nav_purity', $purity);
@@ -232,8 +244,14 @@ if (!$dry) {
     $problems = [];
     foreach ($wire as $slug => $_) {
         $p = $find($slug);
-        if (get_post_meta($p->ID, '_nav_coa_pdf', true) !== esc_url_raw($coa_url)) {
-            $problems[] = "{$slug}: _nav_coa_pdf not set";
+        $want = esc_url_raw($coa_map[$slug] ?? '');
+        $got  = get_post_meta($p->ID, '_nav_coa_pdf', true);
+        if ($got !== $want) {
+            $problems[] = "{$slug}: _nav_coa_pdf is '{$got}', expected '{$want}'";
+        }
+        // Every product must point at its OWN file, never a shared one.
+        if ($got !== '' && !str_contains($got, "coa-")) {
+            $problems[] = "{$slug}: certificate URL is not a per-product file: {$got}";
         }
         if ($p->post_status !== 'publish') $problems[] = "{$slug}: not published";
     }

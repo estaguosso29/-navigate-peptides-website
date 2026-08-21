@@ -214,7 +214,7 @@ while (have_posts()) : the_post();
                             <?php endif; ?>
                             <?php if ($coa_url) : ?>
                                 <a href="<?php echo esc_url($coa_url); ?>" class="nav-product-single__coa-link" target="_blank" rel="noopener">
-                                    <?php esc_html_e('View Certificate of Analysis →', 'navigate-peptides'); ?>
+                                    <?php esc_html_e('View COA →', 'navigate-peptides'); ?>
                                 </a>
                             <?php endif; ?>
                         </div>
@@ -239,7 +239,7 @@ while (have_posts()) : the_post();
                         <?php endif; ?>
                         <?php if ($coa_url) : ?>
                             <a href="<?php echo esc_url($coa_url); ?>" class="nav-trust-strip__coa" target="_blank" rel="noopener">
-                                <?php esc_html_e('Download COA', 'navigate-peptides'); ?>
+                                <?php esc_html_e('View COA', 'navigate-peptides'); ?>
                                 <span aria-hidden="true">↗</span>
                             </a>
                         <?php endif; ?>
